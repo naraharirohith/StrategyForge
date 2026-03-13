@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// Users
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  strategies    Strategy[]
+  backtestRuns  BacktestRun[]
+  subscriptions Subscription[] @relation("subscriber")
+  earnings      Subscription[] @relation("creator")
+
+  @@map("users")
+}
+
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+// ============================================================
+// Strategies
+// ============================================================
+
+model Strategy {
+  id          String          @id @default(cuid())
+  userId      String          @map("user_id")
+  name        String
+  description String
+  market      Market
+  style       StrategyStyle
+  riskLevel   RiskLevel       @map("risk_level")
+  timeframe   String
+  
+  // The full strategy definition JSON (StrategyDefinition from types)
+  definition  Json
+  
+  // Publishing
+  isPublished Boolean         @default(false) @map("is_published")
+  publishedAt DateTime?       @map("published_at")
+  priceMonthly Float?         @map("price_monthly")  // subscription price in USD/INR
+  currency    String          @default("USD")
+  
+  // Scoring (denormalized from latest backtest for fast queries)
+  score       Float?          // 0-100 composite StrategyScore
+  grade       String?         // S/A/B/C/D/F
+  sharpeRatio Float?          @map("sharpe_ratio")
+  maxDrawdown Float?          @map("max_drawdown")
+  totalReturn Float?          @map("total_return")
+  
+  // Live confidence (updated periodically)
+  confidenceScore Float?      @map("confidence_score")
+  confidenceData  Json?       @map("confidence_data")  // full ConfidenceScore object
+  confidenceUpdatedAt DateTime? @map("confidence_updated_at")
+  
+  // Metadata
+  tags        String[]        @default([])
+  viewCount   Int             @default(0) @map("view_count")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  user          User            @relation(fields: [userId], references: [id])
+  backtestRuns  BacktestRun[]
+  subscriptions Subscription[]
+
+  @@index([market, isPublished])
+  @@index([score(sort: Desc)])
+  @@index([userId])
+  @@map("strategies")
+}
+
+enum Market {
+  US
+  IN
+}
+
+enum StrategyStyle {
+  momentum
+  mean_reversion
+  swing
+  positional
+  intraday
+  portfolio
+  hybrid
+}
+
+enum RiskLevel {
+  conservative
+  moderate
+  aggressive
+}
+
+// ============================================================
+// Backtest Runs
+// ============================================================
+
+model BacktestRun {
+  id          String   @id @default(cuid())
+  strategyId  String   @map("strategy_id")
+  userId      String   @map("user_id")
+  
+  status      BacktestStatus @default(PENDING)
+  
+  // Results (full BacktestResult JSON)
+  result      Json?
+  
+  // Denormalized summary for fast queries
+  totalReturn     Float?   @map("total_return")
+  sharpeRatio     Float?   @map("sharpe_ratio")
+  maxDrawdown     Float?   @map("max_drawdown")
+  winRate         Float?   @map("win_rate")
+  profitFactor    Float?   @map("profit_factor")
+  totalTrades     Int?     @map("total_trades")
+  score           Float?   // composite StrategyScore
+  grade           String?
+  
+  // Walk-forward validation
+  overfittingRisk String?  @map("overfitting_risk")  // low/medium/high
+  
+  // Timing
+  startedAt   DateTime?  @map("started_at")
+  completedAt DateTime?  @map("completed_at")
+  durationMs  Int?       @map("duration_ms")
+  errorMsg    String?    @map("error_msg")
+  
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  strategy Strategy @relation(fields: [strategyId], references: [id])
+  user     User     @relation(fields: [userId], references: [id])
+
+  @@index([strategyId])
+  @@index([userId])
+  @@map("backtest_runs")
+}
+
+enum BacktestStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+// ============================================================
+// OHLCV Data Cache
+// ============================================================
+
+model OhlcvCache {
+  id        String   @id @default(cuid())
+  ticker    String
+  timeframe String
+  date      DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+
+  @@unique([ticker, timeframe, date])
+  @@index([ticker, timeframe, date])
+  @@map("ohlcv_cache")
+}
+
+// ============================================================
+// Marketplace Subscriptions
+// ============================================================
+
+model Subscription {
+  id           String   @id @default(cuid())
+  subscriberId String   @map("subscriber_id")
+  creatorId    String   @map("creator_id")
+  strategyId   String   @map("strategy_id")
+  
+  status       SubStatus @default(ACTIVE)
+  priceMonthly Float    @map("price_monthly")
+  currency     String   @default("USD")
+  
+  // Revenue tracking
+  platformFee  Float    @map("platform_fee")    // 20% of price
+  creatorPayout Float   @map("creator_payout")  // 80% of price
+  
+  startedAt    DateTime @default(now()) @map("started_at")
+  expiresAt    DateTime @map("expires_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+
+  subscriber User     @relation("subscriber", fields: [subscriberId], references: [id])
+  creator    User     @relation("creator", fields: [creatorId], references: [id])
+  strategy   Strategy @relation(fields: [strategyId], references: [id])
+
+  @@index([subscriberId])
+  @@index([creatorId])
+  @@index([strategyId])
+  @@map("subscriptions")
+}
+
+enum SubStatus {
+  ACTIVE
+  CANCELLED
+  EXPIRED
+}
+
+// ============================================================
+// AI Generation Log (for debugging and analytics)
+// ============================================================
+
+model GenerationLog {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  provider      String   // "claude" or "openai"
+  model         String   // "claude-sonnet-4-20250514"
+  userInput     String   @map("user_input")   // raw user description
+  promptHash    String   @map("prompt_hash")
+  responseRaw   String?  @map("response_raw") // raw LLM response (for debugging)
+  success       Boolean
+  errorMsg      String?  @map("error_msg")
+  latencyMs     Int?     @map("latency_ms")
+  tokensUsed    Int?     @map("tokens_used")
+  strategyId    String?  @map("strategy_id")  // if successfully created
+  
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("generation_logs")
+}

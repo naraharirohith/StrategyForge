@@ -1,0 +1,17 @@
+{
+  "name": "strategyforge",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "cd apps/api && npm run dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "dev:engine": "cd apps/engine && python main.py"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

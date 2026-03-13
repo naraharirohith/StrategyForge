@@ -1,0 +1,7 @@
+{
+  "name": "@strategyforge/types",
+  "version": "0.1.0",
+  "private": true,
+  "main": "strategy.ts",
+  "types": "strategy.ts"
+}
