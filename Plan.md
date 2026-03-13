@@ -8,8 +8,8 @@
 - [x] Prisma database schema (`apps/api/prisma/schema.prisma`)
 - [x] Express API gateway (`apps/api/src/index.ts`)
 - [x] CLAUDE.md + PRD documentation
-- [ ] Project setup: install all deps, run migrations, verify services start
-- [ ] Test backtest pipeline with hardcoded strategy (AAPL golden cross)
+- [x] Project setup: install all deps, run migrations, verify services start
+- [x] Test backtest pipeline with hardcoded strategy (AAPL golden cross)
 - [ ] Test AI generation with Claude API key
 - [ ] Next.js frontend: Strategy generator page (input form → API → display result)
 - [ ] Next.js frontend: Backtest results dashboard (equity curve, metrics, trades)

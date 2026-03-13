@@ -2,11 +2,16 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 dotenv.config();
 
 const app = express();
-const prisma = new PrismaClient();
+
+// Initialize Prisma with Postgres adapter
+const connectionString = process.env.DATABASE_URL!;
+const adapter = new PrismaPg({ connectionString });
+const prisma = new PrismaClient({ adapter });
 const PORT = process.env.PORT || 3001;
 const ENGINE_URL = process.env.ENGINE_URL || "http://localhost:8001";
 
