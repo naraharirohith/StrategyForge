@@ -139,13 +139,37 @@ The "description" field should explain the strategy in plain English:
 - Expected behavior in different market regimes
 - Key risks the user should be aware of
 
-## Example indicator condition patterns:
+## EXACT JSON Structure — copy this format precisely
 
-Golden Cross: EMA(50) crosses_above EMA(200) → bullish entry
-RSI Oversold Bounce: RSI(14) crosses_above 30 AND price > SMA(200) → mean reversion long
-MACD Divergence: MACD histogram > 0 AND MACD crosses_above signal line → momentum entry
-Bollinger Squeeze: Price crosses_below BBANDS lower AND RSI < 35 → mean reversion entry
-Supertrend Flip: Supertrend changes direction → trend following entry/exit`;
+### entry_rules conditions MUST use this exact structure:
+"conditions": {
+  "logic": "AND",
+  "conditions": [
+    { "id": "c1", "left": { "type": "indicator", "indicator_id": "ema_50" }, "operator": "crosses_above", "right": { "type": "indicator", "indicator_id": "ema_200" } },
+    { "id": "c2", "left": { "type": "indicator", "indicator_id": "rsi_14" }, "operator": "lt", "right": { "type": "constant", "value": 60 } }
+  ]
+}
+CRITICAL: use "logic" NOT "type". Use "conditions" array NOT "rules" array.
+Each condition MUST have "left" and "right" objects with "type" field. NOT "indicator_id" at top level.
+
+### position_sizing MUST use this exact structure:
+"position_sizing": { "method": "percent_of_portfolio", "percent": 10 }
+CRITICAL: use "method" NOT "type". Use "percent_of_portfolio" NOT "percentage_of_capital".
+
+### exit_rules — "value" is always a top-level number, NEVER nested in "params":
+{ "id": "sl", "name": "Stop Loss", "type": "stop_loss", "value": 5, "priority": 1 }
+{ "id": "tp", "name": "Take Profit", "type": "take_profit", "value": 15, "priority": 2 }
+{ "id": "tr", "name": "Trailing Stop", "type": "trailing_stop", "value": 8, "priority": 3 }
+{ "id": "tb", "name": "Time Exit", "type": "time_based", "value": 10, "priority": 4 }
+
+### backtest_config MUST use "commission_percent" and "slippage_percent" (NOT "commission" or "slippage"):
+"backtest_config": { "initial_capital": 100000, "currency": "USD", "commission_percent": 0.1, "slippage_percent": 0.05 }
+
+## Example condition patterns:
+
+Golden Cross: EMA(50) crosses_above EMA(200) → left: {type:indicator, indicator_id:ema_50}, operator: crosses_above, right: {type:indicator, indicator_id:ema_200}
+RSI threshold: RSI < 30 → left: {type:indicator, indicator_id:rsi_14}, operator: lt, right: {type:constant, value:30}
+Price vs indicator: Close > SMA(200) → left: {type:price, field:close}, operator: gt, right: {type:indicator, indicator_id:sma_200}`;
 
 // ============================================================
 // User Prompt Builder
@@ -169,7 +193,7 @@ function buildUserPrompt(input: UserStrategyInput): string {
     if (p.holding_period) prompt += `- Holding period: ${p.holding_period}\n`;
   }
 
-  prompt += `\nRespond with ONLY the JSON strategy definition. No other text.`;
+  prompt += `\nRespond with ONLY a JSON object that has EXACTLY these top-level keys: schema_version, name, description, style, risk_level, universe, timeframe, indicators, entry_rules, exit_rules, risk_management, backtest_config. No other text, no markdown.`;
   return prompt;
 }
 
@@ -287,17 +311,98 @@ export class StrategyGenerator {
 }
 
 // ============================================================
+// Gemini Adapter (Google AI — free tier: 1500 req/day)
+// ============================================================
+
+export class GeminiProvider implements LLMProvider {
+  name = "gemini";
+  private apiKey: string;
+  private model: string;
+
+  constructor(apiKey: string, model = "gemini-2.5-flash") {
+    this.apiKey = apiKey;
+    this.model = model;
+  }
+
+  async generate(systemPrompt: string, userPrompt: string): Promise<string> {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 8192,
+            responseMimeType: "application/json",
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        }),
+      }
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(`Gemini API error: ${data.error.message}`);
+    return data.candidates[0].content.parts[0].text;
+  }
+}
+
+// ============================================================
+// OpenRouter Adapter (OpenAI-compatible, many free models)
+// ============================================================
+
+export class OpenRouterProvider implements LLMProvider {
+  name = "openrouter";
+  private apiKey: string;
+  private model: string;
+
+  constructor(apiKey: string, model = "google/gemma-3-12b-it:free") {
+    this.apiKey = apiKey;
+    this.model = model;
+  }
+
+  async generate(systemPrompt: string, userPrompt: string): Promise<string> {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${this.apiKey}`,
+        "HTTP-Referer": "https://strategyforge.app",
+        "X-Title": "StrategyForge",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.7,
+        max_tokens: 4096,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(`OpenRouter API error: ${data.error.message}`);
+    return data.choices[0].message.content;
+  }
+}
+
+// ============================================================
 // Factory — Convenience function
 // ============================================================
 
 export function createGenerator(config: {
-  provider: "claude" | "openai";
+  provider: "claude" | "openai" | "openrouter" | "gemini";
   apiKey: string;
   model?: string;
 }): StrategyGenerator {
-  const provider =
-    config.provider === "claude"
-      ? new ClaudeProvider(config.apiKey, config.model)
-      : new OpenAIProvider(config.apiKey, config.model);
-  return new StrategyGenerator(provider);
+  if (config.provider === "claude") {
+    return new StrategyGenerator(new ClaudeProvider(config.apiKey, config.model));
+  } else if (config.provider === "openrouter") {
+    return new StrategyGenerator(new OpenRouterProvider(config.apiKey, config.model));
+  } else if (config.provider === "gemini") {
+    return new StrategyGenerator(new GeminiProvider(config.apiKey, config.model));
+  } else {
+    return new StrategyGenerator(new OpenAIProvider(config.apiKey, config.model));
+  }
 }

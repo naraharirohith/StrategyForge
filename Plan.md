@@ -10,7 +10,7 @@
 - [x] CLAUDE.md + PRD documentation
 - [x] Project setup: install all deps, run migrations, verify services start
 - [x] Test backtest pipeline with hardcoded strategy (AAPL golden cross)
-- [ ] Test AI generation with Claude API key
+- [x] Test AI generation with Gemini API (gemini-2.5-flash, free tier)
 - [ ] Next.js frontend: Strategy generator page (input form → API → display result)
 - [ ] Next.js frontend: Backtest results dashboard (equity curve, metrics, trades)
 - [ ] Next.js frontend: StrategyScore display (score card, breakdown, grade badge)

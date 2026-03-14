@@ -49,7 +49,7 @@ app.get("/api/health", async (_req, res) => {
 
 app.post("/api/strategies/generate", async (req, res) => {
   try {
-    const { description, preferences, provider = "claude" } = req.body;
+    const { description, preferences, provider = "gemini", model } = req.body;
 
     if (!description?.trim()) {
       return res.status(400).json({ error: "Description is required" });
@@ -61,16 +61,26 @@ app.post("/api/strategies/generate", async (req, res) => {
     const apiKey =
       provider === "claude"
         ? process.env.ANTHROPIC_API_KEY
+        : provider === "openrouter"
+        ? process.env.OPENROUTER_API_KEY
+        : provider === "gemini"
+        ? process.env.GEMINI_API_KEY
         : process.env.OPENAI_API_KEY;
 
     if (!apiKey) {
       return res.status(500).json({ error: `${provider} API key not configured` });
     }
 
-    const generator = createGenerator({ provider, apiKey });
+    const generator = createGenerator({ provider, apiKey, model });
 
     const startTime = Date.now();
-    const strategy = await generator.generate({ description, preferences });
+    let strategy;
+    try {
+      strategy = await generator.generate({ description, preferences });
+    } catch (genErr: any) {
+      console.error("Raw generation error:", genErr.message.substring(0, 1000));
+      throw genErr;
+    }
     const latencyMs = Date.now() - startTime;
 
     // Save to database
@@ -178,3 +188,5 @@ app.listen(PORT, () => {
   console.log(`StrategyForge API running on port ${PORT}`);
   console.log(`Engine URL: ${ENGINE_URL}`);
 });
+
+
