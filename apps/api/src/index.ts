@@ -19,6 +19,21 @@ app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
 // ============================================================
+// Guest user — used for all saves until auth is added
+// ============================================================
+
+let guestUserId: string;
+
+async function ensureGuestUser() {
+  const guest = await prisma.user.upsert({
+    where: { email: "guest@strategyforge.local" },
+    update: {},
+    create: { email: "guest@strategyforge.local", name: "Guest" },
+  });
+  guestUserId = guest.id;
+}
+
+// ============================================================
 // Health
 // ============================================================
 
@@ -84,11 +99,23 @@ app.post("/api/strategies/generate", async (req, res) => {
     const latencyMs = Date.now() - startTime;
 
     // Save to database
-    // const saved = await prisma.strategy.create({ ... });
+    const saved = await prisma.strategy.create({
+      data: {
+        userId: guestUserId,
+        name: strategy.name,
+        description: strategy.description,
+        market: strategy.universe.market as "US" | "IN",
+        style: strategy.style as any,
+        riskLevel: strategy.risk_level as any,
+        timeframe: strategy.timeframe,
+        definition: strategy as any,
+      },
+    });
 
     res.json({
       success: true,
-      strategy,
+      strategy: { ...strategy, id: saved.id },
+      strategyId: saved.id,
       latency_ms: latencyMs,
       provider,
     });
@@ -104,7 +131,7 @@ app.post("/api/strategies/generate", async (req, res) => {
 
 app.post("/api/strategies/backtest", async (req, res) => {
   try {
-    const { strategy } = req.body;
+    const { strategy, strategyId } = req.body;
 
     if (!strategy) {
       return res.status(400).json({ error: "Strategy definition is required" });
@@ -117,10 +144,67 @@ app.post("/api/strategies/backtest", async (req, res) => {
       body: JSON.stringify({ strategy }),
     });
 
+    const data = await engineRes.json();
+
+    // Persist backtest run and update strategy scores if we have a DB record
+    if (strategyId && data.success && data.result) {
+      const r = data.result;
+      await prisma.backtestRun.create({
+        data: {
+          strategyId,
+          userId: guestUserId,
+          status: "COMPLETED",
+          result: r as any,
+          totalReturn: r.summary.total_return_percent,
+          sharpeRatio: r.summary.sharpe_ratio,
+          maxDrawdown: r.summary.max_drawdown_percent,
+          winRate: r.summary.win_rate,
+          profitFactor: r.summary.profit_factor,
+          totalTrades: r.summary.total_trades,
+          score: r.score.overall,
+          grade: r.score.grade,
+          completedAt: new Date(),
+          durationMs: data.duration_ms,
+        },
+      });
+
+      await prisma.strategy.update({
+        where: { id: strategyId },
+        data: {
+          score: r.score.overall,
+          grade: r.score.grade,
+          sharpeRatio: r.summary.sharpe_ratio,
+          maxDrawdown: r.summary.max_drawdown_percent,
+          totalReturn: r.summary.total_return_percent,
+        },
+      });
+    }
+
+    res.json(data);
+  } catch (e: any) {
+    console.error("Backtest error:", e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ============================================================
+// Confidence Score
+// ============================================================
+
+app.post("/api/strategies/confidence", async (req, res) => {
+  try {
+    const { strategy, backtest_result } = req.body;
+    if (!strategy || !backtest_result) {
+      return res.status(400).json({ error: "strategy and backtest_result are required" });
+    }
+    const engineRes = await fetch(`${ENGINE_URL}/confidence`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ strategy, latest_backtest: backtest_result }),
+    });
     const result = await engineRes.json();
     res.json(result);
   } catch (e: any) {
-    console.error("Backtest error:", e);
     res.status(500).json({ success: false, error: e.message });
   }
 });
@@ -184,9 +268,16 @@ app.get("/api/marketplace", async (req, res) => {
 // Start
 // ============================================================
 
-app.listen(PORT, () => {
-  console.log(`StrategyForge API running on port ${PORT}`);
-  console.log(`Engine URL: ${ENGINE_URL}`);
-});
+ensureGuestUser()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`StrategyForge API running on port ${PORT}`);
+      console.log(`Engine URL: ${ENGINE_URL}`);
+    });
+  })
+  .catch((e) => {
+    console.error("Failed to initialize guest user:", e);
+    process.exit(1);
+  });
 
 

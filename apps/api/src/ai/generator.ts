@@ -99,10 +99,11 @@ You MUST respond with ONLY a valid JSON object conforming to the StrategyDefinit
 ## Schema Rules
 
 1. **schema_version**: Always "1.0.0"
-2. **universe**: Must include market ("US" or "IN"), asset_class, and either tickers[] or selection_criteria
+2. **universe**: Must include market ("US" or "IN"), asset_class, and a tickers[] array (REQUIRED — never use selection_criteria)
    - US tickers: plain symbols like "AAPL", "MSFT", "SPY"
-   - Indian tickers: append ".NS" for NSE, ".BO" for BSE (e.g., "RELIANCE.NS", "TCS.NS")
-   - Index tickers: "^NSEI" (NIFTY50), "^NSEBANK" (BANKNIFTY), "^GSPC" (S&P500), "^IXIC" (NASDAQ)
+   - Indian tickers: ALWAYS append ".NS" suffix (e.g., "RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS")
+   - For NIFTY50 strategies pick 4-6 top NIFTY50 stocks with .NS suffix — do NOT use index symbols as the strategy ticker
+   - Index tickers for reference only: "^NSEI" (NIFTY50), "^GSPC" (S&P500)
 3. **indicators**: Each must have a unique id, valid type, and params. Common configs:
    - SMA/EMA: { period: N }
    - RSI: { period: 14 }
@@ -215,8 +216,9 @@ export class StrategyGenerator {
     const userPrompt = buildUserPrompt(input);
     const raw = await this.provider.generate(SYSTEM_PROMPT, userPrompt);
 
-    // Parse and validate
+    // Parse, normalize enums, then validate
     const strategy = this.parseStrategy(raw);
+    this.normalizeEnums(strategy);
     this.validate(strategy);
 
     // Attach AI metadata
@@ -248,6 +250,18 @@ export class StrategyGenerator {
   }
 
   /**
+   * Normalize enum fields to lowercase_underscore to handle AI capitalisation variance
+   */
+  private normalizeEnums(strategy: any): void {
+    const slug = (s: string) => String(s).toLowerCase().replace(/[\s-]+/g, "_");
+    if (strategy.style)      strategy.style      = slug(strategy.style);
+    if (strategy.risk_level) strategy.risk_level = slug(strategy.risk_level);
+    if (strategy.universe?.market)      strategy.universe.market      = String(strategy.universe.market).toUpperCase();
+    if (strategy.universe?.asset_class) strategy.universe.asset_class = slug(strategy.universe.asset_class);
+    if (strategy.timeframe)  strategy.timeframe  = String(strategy.timeframe).toLowerCase();
+  }
+
+  /**
    * Validate strategy meets minimum requirements
    */
   private validate(strategy: StrategyDefinition): void {
@@ -262,8 +276,8 @@ export class StrategyGenerator {
     if (!strategy.universe?.market) {
       errors.push("Universe market is required");
     }
-    if (!strategy.universe?.tickers?.length && !strategy.universe?.selection_criteria) {
-      errors.push("Universe must have tickers or selection_criteria");
+    if (!strategy.universe?.tickers?.length) {
+      errors.push("Universe must have a tickers array with at least one ticker");
     }
     if (!strategy.indicators?.length) {
       errors.push("At least one indicator is required");
