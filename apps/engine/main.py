@@ -268,9 +268,58 @@ class IndicatorCalculator:
                             obv.iloc[i] = obv.iloc[i-1]
                     df[ind_id] = obv
 
+                elif ind_type == "DONCHIAN":
+                    period = int(params.get("period", 20))
+                    df[f"{ind_id}_upper"] = df["High"].rolling(window=period).max()
+                    df[f"{ind_id}_lower"] = df["Low"].rolling(window=period).min()
+                    df[f"{ind_id}_middle"] = (df[f"{ind_id}_upper"] + df[f"{ind_id}_lower"]) / 2
+                    df[ind_id] = df[f"{ind_id}_upper"]  # default reference = upper band
+
+                elif ind_type == "WMA":
+                    period = int(params.get("period", 20))
+                    weights = np.arange(1, period + 1, dtype=float)
+                    df[ind_id] = df[source].rolling(window=period).apply(
+                        lambda x: np.dot(x, weights) / weights.sum(), raw=True
+                    )
+
+                elif ind_type == "VWAP":
+                    typical = (df["High"] + df["Low"] + df["Close"]) / 3
+                    df[ind_id] = (typical * df["Volume"]).cumsum() / df["Volume"].cumsum()
+
+                elif ind_type == "CCI":
+                    period = int(params.get("period", 20))
+                    typical = (df["High"] + df["Low"] + df["Close"]) / 3
+                    sma = typical.rolling(window=period).mean()
+                    mad = typical.rolling(window=period).apply(lambda x: np.abs(x - x.mean()).mean(), raw=True)
+                    df[ind_id] = (typical - sma) / (0.015 * mad)
+
+                elif ind_type == "WILLIAMS_R":
+                    period = int(params.get("period", 14))
+                    highest_high = df["High"].rolling(window=period).max()
+                    lowest_low = df["Low"].rolling(window=period).min()
+                    df[ind_id] = -100 * (highest_high - df["Close"]) / (highest_high - lowest_low)
+
+                elif ind_type == "MFI":
+                    period = int(params.get("period", 14))
+                    typical = (df["High"] + df["Low"] + df["Close"]) / 3
+                    raw_mf = typical * df["Volume"]
+                    pos_mf = raw_mf.where(typical > typical.shift(1), 0).rolling(window=period).sum()
+                    neg_mf = raw_mf.where(typical < typical.shift(1), 0).rolling(window=period).sum()
+                    df[ind_id] = 100 - (100 / (1 + pos_mf / neg_mf.replace(0, np.nan)))
+
+                elif ind_type == "HIGH_LOW_RANGE":
+                    period = int(params.get("period", 20))
+                    df[ind_id] = df["High"].rolling(window=period).max() - df["Low"].rolling(window=period).min()
+
+                elif ind_type in ("KELTNER", "PSAR", "GAP"):
+                    # Stub: set to Close so conditions can still reference the id without all-NaN
+                    df[ind_id] = df["Close"]
+                    print(f"Warning: {ind_type} not fully implemented — using Close as placeholder")
+
                 else:
-                    # Unknown indicator — skip with warning
-                    df[ind_id] = float("nan")
+                    # Truly unknown — use Close as placeholder so dropna doesn't wipe all rows
+                    df[ind_id] = df["Close"]
+                    print(f"Warning: Unknown indicator type '{ind_type}' for {ind_id} — using Close as placeholder")
 
             except Exception as e:
                 df[ind_id] = float("nan")
@@ -795,28 +844,54 @@ async def run_backtest(req: BacktestRequest):
         if not tickers:
             raise ValueError("No tickers specified in strategy universe")
 
-        # For MVP: backtest the primary ticker
-        primary_ticker = tickers[0]
-
-        # Fetch data
-        df = DataFetcher.fetch(
-            primary_ticker, timeframe,
-            start_date=bt_config.get("start_date"),
-            end_date=bt_config.get("end_date"),
-        )
-
-        if len(df) < 50:
-            raise ValueError(f"Insufficient data for {primary_ticker}: only {len(df)} bars")
-
-        # Compute indicators
+        # Try each ticker until one has enough data after warmup
         indicators = strategy.get("indicators", [])
-        df = IndicatorCalculator.compute(df, indicators)
+        df = None
+        primary_ticker = None
+        last_error = None
 
-        # Drop NaN rows from indicator warmup
-        df = df.dropna()
+        for ticker in tickers:
+            try:
+                raw = DataFetcher.fetch(
+                    ticker, timeframe,
+                    start_date=bt_config.get("start_date"),
+                    end_date=bt_config.get("end_date"),
+                )
+                if len(raw) < 50:
+                    last_error = f"{ticker}: only {len(raw)} bars fetched"
+                    continue
 
-        if len(df) < 30:
-            raise ValueError("Insufficient data after indicator warmup period")
+                computed = IndicatorCalculator.compute(raw, indicators)
+
+                # Determine warmup from indicator periods
+                max_warmup = 0
+                for ind in indicators:
+                    p = ind.get("params", {})
+                    max_warmup = max(
+                        max_warmup,
+                        int(p.get("period", 0)),
+                        int(p.get("slow", 0)),     # MACD slow period
+                        int(p.get("k_period", 0)), # STOCH
+                    )
+
+                # Slice off warmup + buffer; forward-fill mid-series gaps
+                trimmed = computed.iloc[max_warmup + 5:].ffill().dropna(
+                    subset=["Open", "High", "Low", "Close", "Volume"]
+                )
+
+                if len(trimmed) < 30:
+                    last_error = f"{ticker}: only {len(trimmed)} bars after warmup ({max_warmup} bars)"
+                    continue
+
+                df = trimmed
+                primary_ticker = ticker
+                break
+            except Exception as e:
+                last_error = f"{ticker}: {e}"
+                continue
+
+        if df is None or primary_ticker is None:
+            raise ValueError(f"No ticker had sufficient data. Last error: {last_error}")
 
         # --------------------------------------------------------
         # Simple event-driven backtest loop

@@ -98,6 +98,12 @@ app.post("/api/strategies/generate", async (req, res) => {
     }
     const latencyMs = Date.now() - startTime;
 
+    // Clamp style/riskLevel to valid enum values
+    const VALID_STYLES = ["momentum","mean_reversion","swing","positional","intraday","portfolio","hybrid"];
+    const VALID_RISKS  = ["conservative","moderate","aggressive"];
+    const dbStyle     = VALID_STYLES.includes(strategy.style)     ? strategy.style     : "hybrid";
+    const dbRiskLevel = VALID_RISKS.includes(strategy.risk_level) ? strategy.risk_level : "moderate";
+
     // Save to database
     const saved = await prisma.strategy.create({
       data: {
@@ -105,8 +111,8 @@ app.post("/api/strategies/generate", async (req, res) => {
         name: strategy.name,
         description: strategy.description,
         market: strategy.universe.market as "US" | "IN",
-        style: strategy.style as any,
-        riskLevel: strategy.risk_level as any,
+        style: dbStyle as any,
+        riskLevel: dbRiskLevel as any,
         timeframe: strategy.timeframe,
         definition: strategy as any,
       },
