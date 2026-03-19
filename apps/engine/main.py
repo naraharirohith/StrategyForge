@@ -1084,19 +1084,178 @@ async def run_backtest(req: BacktestRequest):
             sharpe = 0
             max_dd = 0
 
-        # Monthly returns
-        monthly_returns = []  # TODO: compute from trade dates
+        # --------------------------------------------------------
+        # Annualized return
+        # --------------------------------------------------------
+        trading_days = len(eq_values)
+        if trading_days > 1 and total_return > -100:
+            total_return_decimal = total_return / 100
+            annualized_return = ((1 + total_return_decimal) ** (252 / trading_days) - 1) * 100
+        else:
+            annualized_return = total_return
 
-        # Regime performance
-        regime_performance = []  # TODO: classify market regimes
+        # --------------------------------------------------------
+        # Sortino ratio
+        # --------------------------------------------------------
+        if len(eq_values) > 1:
+            neg_returns = returns[returns < 0]
+            if len(neg_returns) > 0:
+                downside_std = float(np.std(neg_returns))
+                annualized_return_decimal = annualized_return / 100
+                sortino = annualized_return_decimal / (downside_std * np.sqrt(252)) if downside_std > 0 else 0
+            else:
+                sortino = float(sharpe)  # no losses → excellent sortino, use sharpe as proxy
+        else:
+            sortino = 0.0
+
+        # --------------------------------------------------------
+        # Max drawdown duration (longest consecutive drawdown stretch)
+        # --------------------------------------------------------
+        max_dd_duration = 0
+        if len(eq_values) > 1:
+            current_dd_start = None
+            current_duration = 0
+            peak_val_dd = eq_values[0]
+            for eq_val in eq_values:
+                if eq_val >= peak_val_dd:
+                    peak_val_dd = eq_val
+                    if current_dd_start is not None:
+                        max_dd_duration = max(max_dd_duration, current_duration)
+                    current_dd_start = None
+                    current_duration = 0
+                else:
+                    if current_dd_start is None:
+                        current_dd_start = eq_val
+                    current_duration += 1
+            # If still in drawdown at end
+            if current_dd_start is not None:
+                max_dd_duration = max(max_dd_duration, current_duration)
+
+        # --------------------------------------------------------
+        # Alpha / Beta — fetch benchmark data
+        # --------------------------------------------------------
+        market = universe.get("market", "US")
+        benchmark_ticker = "^NSEI" if market == "IN" else "SPY"
+        alpha_val = 0.0
+        beta_val = 0.0
+        try:
+            import yfinance as yf
+            bench_data = yf.download(
+                benchmark_ticker, period="max", interval="1d",
+                progress=False, auto_adjust=True
+            )
+            if isinstance(bench_data.columns, pd.MultiIndex):
+                bench_data.columns = bench_data.columns.get_level_values(0)
+            # Align benchmark dates with our equity curve dates
+            eq_dates = pd.DatetimeIndex([pd.Timestamp(e[0]) for e in equity_curve])
+            bench_aligned = bench_data["Close"].reindex(eq_dates, method="ffill").dropna()
+            if len(bench_aligned) > 10:
+                bench_returns = bench_aligned.pct_change().dropna().values
+                strat_eq = np.array([e[1] for e in equity_curve])
+                # Align lengths
+                min_len = min(len(bench_returns), len(strat_eq) - 1)
+                strat_returns_aligned = np.diff(strat_eq[-min_len - 1:]) / strat_eq[-min_len - 1:-1]
+                bench_returns_aligned = bench_returns[-min_len:]
+                if len(strat_returns_aligned) > 5 and len(bench_returns_aligned) > 5:
+                    cov_matrix = np.cov(strat_returns_aligned, bench_returns_aligned)
+                    bench_var = np.var(bench_returns_aligned)
+                    beta_val = float(cov_matrix[0, 1] / bench_var) if bench_var > 0 else 0.0
+                    bench_total_return = float((bench_aligned.iloc[-1] / bench_aligned.iloc[0] - 1) * 100)
+                    bench_annualized = ((1 + bench_total_return / 100) ** (252 / len(bench_aligned)) - 1) * 100
+                    alpha_val = annualized_return - beta_val * bench_annualized
+        except Exception as e:
+            print(f"Alpha/Beta calculation failed: {e}")
+
+        # --------------------------------------------------------
+        # Monthly returns — resample equity curve to month-end
+        # --------------------------------------------------------
+        monthly_returns = []
+        try:
+            eq_series = pd.Series(
+                [e[1] for e in equity_curve],
+                index=pd.DatetimeIndex([pd.Timestamp(e[0]) for e in equity_curve])
+            )
+            monthly_eq = eq_series.resample("ME").last().dropna()
+            if len(monthly_eq) >= 2:
+                for i in range(1, len(monthly_eq)):
+                    prev_val = float(monthly_eq.iloc[i - 1])
+                    curr_val = float(monthly_eq.iloc[i])
+                    month_return = ((curr_val - prev_val) / prev_val * 100) if prev_val != 0 else 0
+                    monthly_returns.append({
+                        "month": str(monthly_eq.index[i])[:7],  # YYYY-MM
+                        "return_percent": round(month_return, 2),
+                        "equity": round(curr_val, 2),
+                    })
+        except Exception as e:
+            print(f"Monthly returns calculation failed: {e}")
+
+        # --------------------------------------------------------
+        # Regime performance breakdown
+        # --------------------------------------------------------
+        regime_performance = []
+        try:
+            bench_ticker_regime = "^NSEI" if market == "IN" else "SPY"
+            bench_regime_data = yf.download(
+                bench_ticker_regime, period="max", interval="1d",
+                progress=False, auto_adjust=True
+            )
+            if isinstance(bench_regime_data.columns, pd.MultiIndex):
+                bench_regime_data.columns = bench_regime_data.columns.get_level_values(0)
+
+            if not bench_regime_data.empty and len(bench_regime_data) > 50:
+                bench_close = bench_regime_data["Close"]
+                bench_sma50 = bench_close.rolling(50).mean()
+
+                # Classify each trade by market regime at entry
+                regime_trades: dict = {"bull": [], "bear": [], "sideways": []}
+                for trade in trades:
+                    try:
+                        entry_ts = pd.Timestamp(trade["entry_date"].split(" ")[0])
+                        # Find closest date on or before entry
+                        available = bench_close.index[bench_close.index <= entry_ts]
+                        if len(available) == 0:
+                            continue
+                        ref_date = available[-1]
+                        price_at_entry = float(bench_close.loc[ref_date])
+                        sma_at_entry = float(bench_sma50.loc[ref_date]) if ref_date in bench_sma50.index else float("nan")
+                        if pd.isna(sma_at_entry):
+                            continue
+                        # 20-day return for trend direction
+                        lookback = bench_close.index[bench_close.index <= ref_date]
+                        if len(lookback) >= 21:
+                            price_20d_ago = float(bench_close.iloc[bench_close.index.get_loc(ref_date) - 20])
+                            ret_20d = (price_at_entry / price_20d_ago - 1) * 100
+                        else:
+                            ret_20d = 0.0
+
+                        if abs(ret_20d) < 2 and abs(price_at_entry - sma_at_entry) / sma_at_entry < 0.02:
+                            regime = "sideways"
+                        elif price_at_entry > sma_at_entry:
+                            regime = "bull"
+                        else:
+                            regime = "bear"
+                        regime_trades[regime].append(trade["pnl_percent"])
+                    except Exception:
+                        continue
+
+                for regime_name, regime_pnls in regime_trades.items():
+                    if regime_pnls:
+                        regime_performance.append({
+                            "regime": regime_name,
+                            "trade_count": len(regime_pnls),
+                            "return_percent": round(float(np.mean(regime_pnls)), 2),
+                            "win_rate": round(sum(1 for p in regime_pnls if p > 0) / len(regime_pnls) * 100, 1),
+                        })
+        except Exception as e:
+            print(f"Regime performance calculation failed: {e}")
 
         summary = {
             "total_return_percent": round(total_return, 2),
-            "annualized_return_percent": round(total_return, 2),  # TODO: annualize properly
+            "annualized_return_percent": round(annualized_return, 2),
             "sharpe_ratio": round(sharpe, 3),
-            "sortino_ratio": round(sharpe * 0.8, 3),  # TODO: proper sortino
+            "sortino_ratio": round(sortino, 3),
             "max_drawdown_percent": round(max_dd, 2),
-            "max_drawdown_duration_days": 0,  # TODO
+            "max_drawdown_duration_days": max_dd_duration,
             "total_trades": len(trades),
             "winning_trades": len(winning),
             "losing_trades": len(losing),
@@ -1110,8 +1269,8 @@ async def run_backtest(req: BacktestRequest):
             "calmar_ratio": round(total_return / abs(max_dd), 3) if max_dd != 0 else 0,
             "volatility_annual": round(float(np.std(returns) * np.sqrt(252) * 100), 2) if len(eq_values) > 1 else 0,
             "benchmark_return_percent": round(((float(df.iloc[-1]["Close"]) / float(df.iloc[0]["Close"])) - 1) * 100, 2),
-            "alpha": 0,  # TODO
-            "beta": 0,   # TODO
+            "alpha": round(alpha_val, 4),
+            "beta": round(beta_val, 4),
         }
 
         # Compute StrategyScore
