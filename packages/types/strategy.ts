@@ -452,27 +452,54 @@ export interface ConfidenceScore {
   components: {
     backtest_strength: {        // 40% weight
       score: number;
+      weight: number;
       description: string;     // "Strong historical performance (Sharpe 1.8)"
     };
     regime_fit: {               // 30% weight
       score: number;
-      current_regime: "bull" | "bear" | "sideways";
-      strategy_regime_preference: string;  // "Performs best in sideways markets"
+      weight: number;
+      current_regime: "bull" | "bear" | "sideways" | "unknown";
+      preferred_regime?: string;              // Python returns this instead of strategy_regime_preference
+      strategy_regime_preference?: string;    // kept for backwards compatibility
       description: string;     // "Current trending market reduces confidence for this mean-reversion strategy"
     };
     signal_proximity: {         // 20% weight
       score: number;
+      weight: number;
       nearest_signal: string;  // "Entry signal 3% away (RSI at 35, trigger at 30)"
+      triggered?: boolean;
       description: string;
     };
     volatility_context: {       // 10% weight
       score: number;
-      current_vix: number;
-      strategy_vol_range: [number, number];  // [min, max] tested range
+      weight: number;
+      current_vix?: number;
+      india_vix?: number | null;
+      us_vix?: number | null;
+      realized_vol?: number;
+      level?: string;
+      strategy_vol_range?: [number, number];  // [min, max] tested range
       description: string;     // "Current volatility within strategy's tested range"
     };
   };
-  
+
+  /**
+   * Recommendation label returned by Python engine
+   */
+  recommendation_label?: string;  // "Favorable" | "Neutral" | "Cautious" | "Unfavorable"
+
+  /**
+   * Global risk indicators from Python engine
+   */
+  global_risk?: {
+    sp500_5d_return?: number;
+    sp500_trend?: string;
+    crude_5d_return?: number;
+    crude_trend?: string;
+    usdinr_5d_change?: number;
+    inr_pressure?: string;
+  };
+
   /**
    * Actionable recommendation
    */

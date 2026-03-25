@@ -12,7 +12,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from main import IndicatorCalculator, evaluate_conditions, evaluate_single_condition
+from services import IndicatorCalculator, evaluate_conditions, evaluate_single_condition
 
 
 # ---------------------------------------------------------------------------

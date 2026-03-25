@@ -8,7 +8,7 @@ import pytest
 import numpy as np
 import pandas as pd
 
-from main import IndicatorCalculator
+from services import IndicatorCalculator
 
 
 # ---------------------------------------------------------------------------

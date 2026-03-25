@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from main import ConfidenceScorer
+from services import ConfidenceScorer
 
 
 # ---------------------------------------------------------------------------

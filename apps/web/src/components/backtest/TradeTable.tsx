@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { fmt } from "@/lib/utils";
+import { fmt, fmtCurrency, currencySymbol } from "@/lib/utils";
 
 interface Trade {
   ticker: string;
@@ -18,6 +18,7 @@ interface Trade {
 
 interface Props {
   trades: Trade[];
+  currency?: string;
 }
 
 const EXIT_LABELS: Record<string, string> = {
@@ -28,7 +29,13 @@ const EXIT_LABELS: Record<string, string> = {
   end_of_data: "End of Data",
 };
 
-export function TradeTable({ trades }: Props) {
+export function TradeTable({ trades, currency = "USD" }: Props) {
+  const sym = currencySymbol(currency);
+  const fmtPrice = (n: number) => `${sym}${fmt(n, 2)}`;
+  const fmtPnl = (n: number) => {
+    const sign = n >= 0 ? "+" : "";
+    return `${sign}${fmtCurrency(n, currency)}`;
+  };
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 15;
   const pages = Math.ceil(trades.length / PAGE_SIZE);
@@ -70,11 +77,11 @@ export function TradeTable({ trades }: Props) {
                   </span>
                 </td>
                 <td className="px-3 py-2 mono text-slate-600">{t.entry_date.split(" ")[0]}</td>
-                <td className="px-3 py-2 mono">${fmt(t.entry_price, 2)}</td>
+                <td className="px-3 py-2 mono">{fmtPrice(t.entry_price)}</td>
                 <td className="px-3 py-2 mono text-slate-600">{t.exit_date.split(" ")[0]}</td>
-                <td className="px-3 py-2 mono">${fmt(t.exit_price, 2)}</td>
+                <td className="px-3 py-2 mono">{fmtPrice(t.exit_price)}</td>
                 <td className={`px-3 py-2 mono font-medium ${t.pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {t.pnl >= 0 ? "+" : ""}${fmt(t.pnl, 0)}
+                  {fmtPnl(t.pnl)}
                 </td>
                 <td className={`px-3 py-2 mono font-medium ${t.pnl_percent >= 0 ? "text-green-600" : "text-red-600"}`}>
                   {t.pnl_percent >= 0 ? "+" : ""}{fmt(t.pnl_percent, 1)}%

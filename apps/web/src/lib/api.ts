@@ -2,12 +2,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
 export async function generateStrategy(
   description: string,
-  preferences?: Record<string, unknown>
+  preferences?: Record<string, unknown>,
+  provider: string = "gemini"
 ) {
   const res = await fetch(`${API_URL}/api/strategies/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description, preferences, provider: "gemini" }),
+    body: JSON.stringify({ description, preferences, provider }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
@@ -37,6 +38,20 @@ export async function runBacktest(
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Backtest failed");
+  return data;
+}
+
+export async function getStrategy(id: string) {
+  const res = await fetch(`${API_URL}/api/strategies/${id}`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Failed to load strategy");
+  return data;
+}
+
+export async function getStrategies() {
+  const res = await fetch(`${API_URL}/api/strategies`);
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Failed to load strategies");
   return data;
 }
 
