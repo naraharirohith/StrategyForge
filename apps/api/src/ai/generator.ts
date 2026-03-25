@@ -210,27 +210,42 @@ export class StrategyGenerator {
   }
 
   /**
-   * Generate a strategy from user input
+   * Generate a strategy from user input (retries once on validation failure)
    */
   async generate(input: UserStrategyInput): Promise<StrategyDefinition> {
     const userPrompt = buildUserPrompt(input);
-    const raw = await this.provider.generate(SYSTEM_PROMPT, userPrompt);
+    let lastError: Error | null = null;
 
-    // Parse, normalize enums, then validate
-    const strategy = this.parseStrategy(raw);
-    this.normalizeEnums(strategy);
-    this.validate(strategy);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const retryPrompt = attempt === 0
+          ? userPrompt
+          : `${userPrompt}\n\nIMPORTANT: Your previous attempt failed validation with these errors:\n${lastError!.message}\n\nFix these issues and try again.`;
 
-    // Attach AI metadata
-    strategy.ai_metadata = {
-      model_used: this.provider.name,
-      prompt_hash: this.hashString(userPrompt),
-      generation_timestamp: new Date().toISOString(),
-      user_input_summary: input.description,
-      confidence_notes: strategy.description,
-    };
+        const raw = await this.provider.generate(SYSTEM_PROMPT, retryPrompt);
+        const strategy = this.parseStrategy(raw);
+        this.normalizeEnums(strategy);
+        this.repair(strategy);
+        this.validate(strategy);
 
-    return strategy;
+        strategy.ai_metadata = {
+          model_used: this.provider.name,
+          prompt_hash: this.hashString(userPrompt),
+          generation_timestamp: new Date().toISOString(),
+          user_input_summary: input.description,
+          confidence_notes: strategy.description,
+        };
+
+        return strategy;
+      } catch (e) {
+        lastError = e instanceof Error ? e : new Error(String(e));
+        if (attempt === 0) {
+          console.warn(`Generation attempt 1 failed, retrying: ${lastError.message.substring(0, 200)}`);
+        }
+      }
+    }
+
+    throw lastError!;
   }
 
   /**
@@ -259,6 +274,90 @@ export class StrategyGenerator {
     if (strategy.universe?.market)      strategy.universe.market      = String(strategy.universe.market).toUpperCase();
     if (strategy.universe?.asset_class) strategy.universe.asset_class = slug(strategy.universe.asset_class);
     if (strategy.timeframe)  strategy.timeframe  = String(strategy.timeframe).toLowerCase();
+  }
+
+  /**
+   * Auto-repair common LLM structural mistakes before validation
+   */
+  private repair(strategy: any): void {
+    // Fix: LLM sometimes uses "type" instead of "logic" in condition groups
+    const fixConditionGroups = (obj: any) => {
+      if (!obj || typeof obj !== 'object') return;
+      if (obj.type === 'AND' || obj.type === 'OR') {
+        obj.logic = obj.type;
+        delete obj.type;
+      }
+      if (obj.rules && !obj.conditions) {
+        obj.conditions = obj.rules;
+        delete obj.rules;
+      }
+      if (Array.isArray(obj.conditions)) {
+        obj.conditions.forEach((c: any) => fixConditionGroups(c));
+      }
+    };
+
+    // Fix entry rules
+    for (const rule of strategy.entry_rules ?? []) {
+      fixConditionGroups(rule.conditions);
+
+      // Fix position_sizing: "type" -> "method"
+      if (rule.position_sizing) {
+        if (rule.position_sizing.type && !rule.position_sizing.method) {
+          rule.position_sizing.method = rule.position_sizing.type;
+          delete rule.position_sizing.type;
+        }
+        // Fix common naming: "percentage_of_capital" -> "percent_of_portfolio"
+        if (rule.position_sizing.method === 'percentage_of_capital') {
+          rule.position_sizing.method = 'percent_of_portfolio';
+        }
+        // Ensure percent field exists for percent_of_portfolio
+        if (rule.position_sizing.method === 'percent_of_portfolio' && !rule.position_sizing.percent) {
+          rule.position_sizing.percent = 10; // safe default
+        }
+      }
+
+      // Ensure side exists
+      if (!rule.side) rule.side = 'long';
+    }
+
+    // Fix exit rules: value in params -> top-level
+    for (const rule of strategy.exit_rules ?? []) {
+      if (!rule.value && rule.params?.value) {
+        rule.value = rule.params.value;
+        delete rule.params;
+      }
+      // Ensure priority
+      if (!rule.priority) {
+        rule.priority = rule.type === 'stop_loss' ? 1 : rule.type === 'take_profit' ? 2 : 3;
+      }
+    }
+
+    // Fix backtest_config field names
+    if (strategy.backtest_config) {
+      const bc = strategy.backtest_config;
+      if (bc.commission !== undefined && bc.commission_percent === undefined) {
+        bc.commission_percent = bc.commission;
+        delete bc.commission;
+      }
+      if (bc.slippage !== undefined && bc.slippage_percent === undefined) {
+        bc.slippage_percent = bc.slippage;
+        delete bc.slippage;
+      }
+      if (!bc.currency) {
+        bc.currency = strategy.universe?.market === 'IN' ? 'INR' : 'USD';
+      }
+    }
+
+    // Fix ticker format for Indian market
+    if (strategy.universe?.market === 'IN' && strategy.universe?.tickers) {
+      strategy.universe.tickers = strategy.universe.tickers.map((t: string) => {
+        if (t === '^NSEI' || t === '^NIFTY' || t === 'NIFTY50') return t; // skip indices
+        return t.endsWith('.NS') ? t : `${t}.NS`;
+      });
+    }
+
+    // Ensure schema_version
+    if (!strategy.schema_version) strategy.schema_version = '1.0.0';
   }
 
   /**
@@ -303,6 +402,66 @@ export class StrategyGenerator {
     // Check backtest config
     if (!strategy.backtest_config?.initial_capital) {
       errors.push("Backtest initial_capital is required");
+    }
+
+    // ---- Deep validation: indicator types ----
+    const SUPPORTED_INDICATORS: string[] = [
+      'SMA', 'EMA', 'WMA', 'VWAP', 'RSI', 'MACD', 'STOCH', 'CCI', 'WILLIAMS_R', 'MFI',
+      'BBANDS', 'ATR', 'KELTNER', 'DONCHIAN', 'OBV', 'VOLUME_SMA', 'ADX', 'SUPERTREND',
+      'ICHIMOKU', 'PSAR', 'SUPPORT', 'RESISTANCE', 'PIVOT_POINTS',
+      'PRICE_CHANGE_PCT', 'HIGH_LOW_RANGE', 'GAP',
+    ];
+
+    for (const ind of (strategy as any).indicators ?? []) {
+      if (!ind.id) errors.push(`Indicator missing id`);
+      if (!ind.type) errors.push(`Indicator ${ind.id ?? '?'} missing type`);
+      else if (!SUPPORTED_INDICATORS.includes(ind.type.toUpperCase())) {
+        errors.push(`Unsupported indicator type: ${ind.type} (supported: ${SUPPORTED_INDICATORS.join(', ')})`);
+      }
+      // Validate params
+      const params = ind.params ?? {};
+      if (['SMA', 'EMA', 'WMA', 'RSI', 'ATR', 'ADX', 'CCI', 'WILLIAMS_R', 'MFI'].includes(ind.type?.toUpperCase())) {
+        if (params.period !== undefined && (typeof params.period !== 'number' || params.period < 1)) {
+          errors.push(`Indicator ${ind.id}: period must be a positive number (got ${params.period})`);
+        }
+      }
+    }
+
+    // ---- Deep validation: entry rule conditions structure ----
+    for (const rule of (strategy as any).entry_rules ?? []) {
+      if (!rule.conditions?.logic) {
+        errors.push(`Entry rule ${rule.id ?? rule.name ?? '?'}: conditions must have a "logic" field ("AND" or "OR")`);
+      }
+      if (!Array.isArray(rule.conditions?.conditions) || rule.conditions.conditions.length === 0) {
+        errors.push(`Entry rule ${rule.id ?? rule.name ?? '?'}: conditions.conditions must be a non-empty array`);
+      }
+      // Validate each condition has left/operator/right
+      for (const c of rule.conditions?.conditions ?? []) {
+        if (c.logic) continue; // nested group, skip
+        if (!c.left) errors.push(`Condition ${c.id ?? '?'}: missing "left" field`);
+        if (!c.operator) errors.push(`Condition ${c.id ?? '?'}: missing "operator" field`);
+        if (!c.right && c.right !== 0) errors.push(`Condition ${c.id ?? '?'}: missing "right" field`);
+      }
+    }
+
+    // ---- Deep validation: exit rule values ----
+    for (const rule of (strategy as any).exit_rules ?? []) {
+      if (['stop_loss', 'take_profit', 'trailing_stop'].includes(rule.type)) {
+        if (typeof rule.value !== 'number' || rule.value <= 0) {
+          errors.push(`Exit rule ${rule.id ?? rule.name ?? '?'}: ${rule.type} must have a positive numeric value`);
+        }
+      }
+    }
+
+    // ---- Deep validation: position sizing ----
+    for (const rule of (strategy as any).entry_rules ?? []) {
+      const ps = rule.position_sizing;
+      if (!ps?.method) {
+        errors.push(`Entry rule ${rule.id ?? rule.name ?? '?'}: position_sizing.method is required`);
+      }
+      if (ps?.method === 'percent_of_portfolio' && (typeof ps.percent !== 'number' || ps.percent <= 0 || ps.percent > 100)) {
+        errors.push(`Entry rule ${rule.id ?? rule.name ?? '?'}: position_sizing.percent must be between 0 and 100`);
+      }
     }
 
     if (errors.length > 0) {

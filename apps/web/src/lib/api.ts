@@ -57,12 +57,13 @@ export async function getStrategies() {
 
 export async function getConfidenceScore(
   strategy: Record<string, unknown>,
-  backtestResult: Record<string, unknown>
+  backtestResult: Record<string, unknown>,
+  strategyId?: string
 ) {
   const res = await fetch(`${API_URL}/api/strategies/confidence`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ strategy, backtest_result: backtestResult }),
+    body: JSON.stringify({ strategy, backtest_result: backtestResult, strategyId }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Confidence scoring failed");

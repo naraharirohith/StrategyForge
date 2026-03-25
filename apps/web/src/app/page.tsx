@@ -82,7 +82,7 @@ export default function Home() {
       // Auto-run confidence scoring after backtest
       setStep("scoring");
       try {
-        const conf = await getConfidenceScore(strategy, result);
+        const conf = await getConfidenceScore(strategy, result, strategyId ?? undefined);
         setConfidence(conf.confidence ?? conf);
       } catch {
         // Confidence scoring is best-effort; don't block the user

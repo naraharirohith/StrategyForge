@@ -270,7 +270,7 @@ strategiesRouter.post("/strategies/backtest", async (req, res) => {
 
 strategiesRouter.post("/strategies/confidence", async (req, res) => {
   try {
-    const { strategy, backtest_result } = req.body;
+    const { strategy, backtest_result, strategyId } = req.body;
     if (!strategy || !backtest_result) {
       return res.status(400).json({ error: "strategy and backtest_result are required" });
     }
@@ -295,6 +295,24 @@ strategiesRouter.post("/strategies/confidence", async (req, res) => {
       }
 
       const result = await engineRes.json();
+
+      // Persist confidence score to the database if strategyId is provided
+      if (strategyId && result.success && result.confidence) {
+        try {
+          await prisma.strategy.update({
+            where: { id: strategyId },
+            data: {
+              confidenceScore: result.confidence.overall,
+              confidenceData: result.confidence as object,
+              confidenceUpdatedAt: new Date(),
+            },
+          });
+        } catch (dbErr) {
+          console.error("Failed to persist confidence score:", dbErr);
+          // Don't fail the request if DB write fails
+        }
+      }
+
       res.json(result);
     } catch (e: unknown) {
       clearTimeout(timeout);
