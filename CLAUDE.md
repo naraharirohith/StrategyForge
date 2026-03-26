@@ -2,6 +2,10 @@
 
 AI-powered stock strategy generator with backtesting and confidence scoring. No trade execution — suggestion and analysis only.
 
+## Product Positioning
+
+StrategyForge fills a gap between Composer (no-code, shallow analysis) and QuantConnect (deep analysis, requires coding). The core loop is: **Describe idea → AI generates strategy → Backtest with honest scoring → Live confidence → Iterate**. Dual-market (US + India) support is a differentiator.
+
 ## Architecture
 
 Monorepo with 3 services:
@@ -26,24 +30,54 @@ cd apps/api && npx prisma studio         # DB browser
 
 # Python engine
 cd apps/engine && source venv/bin/activate && python main.py
+
+# Tests
+cd apps/engine && source venv/bin/activate && python -m pytest tests/ -v
 ```
 
 ## Key Files
 
-- `packages/types/strategy.ts` — Core type system (StrategyDefinition, BacktestResult, ConfidenceScore). This is the contract between all services.
-- `apps/api/src/ai/generator.ts` — AI strategy generation (Claude + OpenAI, model-agnostic)
-- `apps/engine/main.py` — Backtesting engine, indicator calculator, score calculator
-- `apps/api/prisma/schema.prisma` — Database schema
-- `STRATEGYFORGE-PRD.md` — Full product spec. Read this for feature details.
+### Type System
+- `packages/types/strategy.ts` — Core type system (StrategyDefinition, BacktestResult, ConfidenceScore). Contract between all services.
+
+### API Gateway
+- `apps/api/src/index.ts` — Express app setup, mounts routers
+- `apps/api/src/routes/strategies.ts` — Generate, backtest, confidence, list, detail endpoints
+- `apps/api/src/routes/marketplace.ts` — Browse published strategies
+- `apps/api/src/routes/health.ts` — Health check
+- `apps/api/src/lib/prisma.ts` — Shared Prisma client + guest user
+- `apps/api/src/middleware/errorHandler.ts` — Global error handler
+- `apps/api/src/ai/generator.ts` — AI strategy generation (Claude, OpenAI, Gemini, OpenRouter)
+
+### Backtesting Engine
+- `apps/engine/main.py` — FastAPI app + routes (imports from services/)
+- `apps/engine/services/data_fetcher.py` — yfinance OHLCV wrapper
+- `apps/engine/services/indicator_calculator.py` — 23 technical indicators
+- `apps/engine/services/backtester.py` — Event-driven backtest loop
+- `apps/engine/services/score_calculator.py` — Composite 0-100 StrategyScore
+- `apps/engine/services/confidence_scorer.py` — Live confidence (regime, signal, volatility)
+- `apps/engine/services/condition_evaluator.py` — Condition evaluation + proximity estimation
+
+### Frontend
+- `apps/web/src/app/page.tsx` — Strategy generator (home page)
+- `apps/web/src/app/strategy/[id]/page.tsx` — Strategy detail with tabs
+- `apps/web/src/app/dashboard/page.tsx` — Saved strategies grid
+- `apps/web/src/components/` — UI components (StrategyCard, EquityCurve, DrawdownChart, etc.)
+- `apps/web/src/lib/api.ts` — API client functions
+- `apps/web/src/lib/utils.ts` — Formatting helpers (currency-aware)
+
+### Database
+- `apps/api/prisma/schema.prisma` — Full schema (User, Strategy, BacktestRun, OhlcvCache, Subscription, GenerationLog)
 
 ## Code Style
 
 - TypeScript strict mode, no `any` types
-- Named exports, not default exports
+- Named exports, not default exports (except Next.js pages)
 - Tailwind utility classes, no custom CSS files
 - Python: type hints, docstrings on public functions
 - Use Prisma for all DB queries (never raw SQL)
 - API responses: `{ success: boolean, data?: T, error?: string }`
+- Frontend currency-aware: use `fmtCurrency(n, currency)` not hardcoded `$`
 
 ## Important Rules
 
@@ -53,10 +87,28 @@ cd apps/engine && source venv/bin/activate && python main.py
 - Strategy definitions are stored as JSONB in PostgreSQL `strategies.definition` column.
 - Cache yfinance data in `ohlcv_cache` table. Don't fetch same ticker+timeframe more than once per hour.
 - Include disclaimer on every frontend page: "For educational purposes only. Not investment advice."
+- Show statistical significance warning when backtest has <30 trades.
+- Always show benchmark comparison (buy-and-hold) on equity curves.
+- Be honest about methodology limitations — transparency builds trust.
+
+## Supported Indicators (23)
+
+Moving Averages: SMA, EMA, WMA, VWAP
+Oscillators: RSI, MACD, STOCH, CCI, WILLIAMS_R, MFI
+Volatility: BBANDS, ATR, KELTNER, DONCHIAN
+Volume: OBV, VOLUME_SMA
+Trend: ADX, SUPERTREND, ICHIMOKU, PSAR
+Price Action: SUPPORT, RESISTANCE, PIVOT_POINTS (stubs)
+Derived: PRICE_CHANGE_PCT, HIGH_LOW_RANGE, GAP (stub)
 
 ## Testing
 
-Use this test strategy to validate the backtest pipeline:
+51 tests covering indicators, scoring, backtesting, and confidence scoring:
+```bash
+cd apps/engine && source venv/bin/activate && python -m pytest tests/ -v
+```
+
+Test strategy for pipeline validation:
 ```bash
 curl -X POST http://localhost:8001/backtest \
   -H "Content-Type: application/json" \

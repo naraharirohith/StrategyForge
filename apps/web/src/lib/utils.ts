@@ -8,11 +8,16 @@ export function fmtPct(n: number) {
 }
 
 export function fmtCurrency(n: number, currency = "USD") {
-  return new Intl.NumberFormat("en-US", {
+  const locale = currency === "INR" ? "en-IN" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     maximumFractionDigits: 0,
   }).format(n);
+}
+
+export function currencySymbol(currency: string) {
+  return currency === "INR" ? "\u20B9" : "$";
 }
 
 export function fmtDate(dateStr: string) {
