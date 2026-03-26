@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { generateStrategy, runBacktest, getConfidenceScore } from "@/lib/api";
+import { generateStrategy, runBacktest, streamBacktest, getConfidenceScore } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
@@ -48,6 +48,7 @@ export default function Home() {
   const [strategyId,  setStrategyId]  = useState<string | null>(null);
   const [backtest,    setBacktest]    = useState<AnyObj | null>(null);
   const [confidence,  setConfidence]  = useState<AnyObj | null>(null);
+  const [progressMsg, setProgressMsg] = useState<string | null>(null);
   const { toast } = useToast();
 
   async function handleGenerate() {
@@ -76,11 +77,27 @@ export default function Home() {
     setStep("backtesting");
     setError(null);
     setConfidence(null);
+    setProgressMsg("Starting backtest...");
+
     try {
-      const data = await runBacktest(strategy, strategyId ?? undefined);
-      // Engine returns { success, result, duration_ms }
-      const result = (data.result ?? data) as AnyObj;
+      const result = await new Promise<AnyObj>((resolve, reject) => {
+        streamBacktest(
+          strategy,
+          strategyId ?? undefined,
+          (_stage, message, _percent) => {
+            setProgressMsg(message);
+          },
+          (result) => {
+            resolve(result as AnyObj);
+          },
+          (error) => {
+            reject(new Error(error));
+          },
+        );
+      });
+
       setBacktest(result);
+      setProgressMsg(null);
       setStep("backtested");
 
       // Auto-run confidence scoring after backtest
@@ -95,6 +112,7 @@ export default function Home() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Backtest failed";
       setError(msg);
+      setProgressMsg(null);
       toast(msg);
       setStep("generated");
     }
@@ -205,9 +223,9 @@ export default function Home() {
         {isBacktesting && (
           <div className="mt-6 flex items-center justify-center gap-3 rounded-xl border border-blue-100 bg-blue-50 py-8 text-sm text-blue-700">
             <Spinner className="text-blue-600" />
-            {step === "scoring"
+            {progressMsg || (step === "scoring"
               ? "Analysing live market conditions…"
-              : "Running backtest — fetching market data and simulating trades…"}
+              : "Running backtest…")}
           </div>
         )}
 

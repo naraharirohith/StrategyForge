@@ -64,6 +64,91 @@ export async function deleteStrategy(id: string) {
   return data;
 }
 
+export function streamBacktest(
+  strategy: Record<string, unknown>,
+  strategyId: string | undefined,
+  onProgress: (stage: string, message: string, percent: number) => void,
+  onResult: (result: Record<string, unknown>) => void,
+  onError: (error: string) => void,
+): () => void {
+  const controller = new AbortController();
+
+  const fiveYearsAgo = new Date();
+  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
+
+  const strategyWithDates = {
+    ...strategy,
+    backtest_config: {
+      ...(strategy.backtest_config as Record<string, unknown>),
+      start_date: fiveYearsAgo.toISOString().split("T")[0],
+      end_date: new Date().toISOString().split("T")[0],
+    },
+  };
+
+  fetch(`${API_URL}/api/strategies/backtest/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ strategy: strategyWithDates, strategyId }),
+    signal: controller.signal,
+  })
+    .then(async (res) => {
+      if (!res.ok || !res.body) {
+        onError("Failed to connect to backtest stream");
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const lines = part.split("\n");
+          let currentEvent = "";
+          let currentData = "";
+
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              currentEvent = line.slice(7);
+            } else if (line.startsWith("data: ")) {
+              currentData = line.slice(6);
+            }
+          }
+
+          if (currentEvent && currentData) {
+            try {
+              const parsed = JSON.parse(currentData);
+              if (currentEvent === "progress") {
+                onProgress(parsed.stage, parsed.message, parsed.percent ?? 0);
+              } else if (currentEvent === "result") {
+                onResult(parsed);
+              } else if (currentEvent === "error") {
+                onError(parsed.error);
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+    })
+    .catch((e) => {
+      if (e.name !== "AbortError") {
+        onError(e.message || "Stream connection failed");
+      }
+    });
+
+  // Return abort function
+  return () => controller.abort();
+}
+
 export async function getConfidenceScore(
   strategy: Record<string, unknown>,
   backtestResult: Record<string, unknown>,

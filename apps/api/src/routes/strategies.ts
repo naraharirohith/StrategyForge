@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma, guestUserId } from "../lib/prisma.js";
+import { generateLimiter, backtestLimiter, confidenceLimiter } from "../middleware/rateLimiter.js";
 
 const ENGINE_URL = process.env.ENGINE_URL || "http://localhost:8001";
 
@@ -68,7 +69,7 @@ strategiesRouter.get("/strategies/:id", async (req, res) => {
 // Strategy Generation
 // ============================================================
 
-strategiesRouter.post("/strategies/generate", async (req, res) => {
+strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) => {
   const startTime = Date.now();
   type ProviderName = "claude" | "openai" | "gemini" | "openrouter";
   let provider: ProviderName = "gemini";
@@ -184,7 +185,7 @@ strategiesRouter.post("/strategies/generate", async (req, res) => {
 // Backtesting
 // ============================================================
 
-strategiesRouter.post("/strategies/backtest", async (req, res) => {
+strategiesRouter.post("/strategies/backtest", backtestLimiter, async (req, res) => {
   try {
     const { strategy, strategyId } = req.body;
 
@@ -265,6 +266,143 @@ strategiesRouter.post("/strategies/backtest", async (req, res) => {
 });
 
 // ============================================================
+// Streaming Backtest (SSE)
+// ============================================================
+
+strategiesRouter.post("/strategies/backtest/stream", backtestLimiter, async (req, res) => {
+  try {
+    const { strategy, strategyId } = req.body;
+
+    if (!strategy) {
+      return res.status(400).json({ error: "Strategy definition is required" });
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000);
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    let finalResult: Record<string, unknown> | null = null;
+
+    try {
+      const engineRes = await fetch(`${ENGINE_URL}/backtest/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ strategy }),
+        signal: controller.signal,
+      });
+
+      if (!engineRes.ok || !engineRes.body) {
+        clearTimeout(timeout);
+        res.write(`event: error\ndata: ${JSON.stringify({ error: "Engine connection failed" })}\n\n`);
+        res.end();
+        return;
+      }
+
+      // Pipe the stream through, capturing the result event for DB persistence
+      const reader = engineRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        res.write(chunk);
+
+        // Parse SSE events from chunk to capture the final result
+        buffer += chunk;
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+
+        for (const part of parts) {
+          const lines = part.split("\n");
+          let eventName = "";
+          let eventData = "";
+          for (const line of lines) {
+            if (line.startsWith("event: ")) {
+              eventName = line.slice(7);
+            } else if (line.startsWith("data: ")) {
+              eventData = line.slice(6);
+            }
+          }
+          if (eventName === "result" && eventData) {
+            try {
+              finalResult = JSON.parse(eventData);
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      clearTimeout(timeout);
+    } catch (e: unknown) {
+      clearTimeout(timeout);
+      const msg =
+        e instanceof Error && e.name === "AbortError"
+          ? "Backtest timed out"
+          : e instanceof Error
+            ? e.message
+            : String(e);
+      res.write(`event: error\ndata: ${JSON.stringify({ error: msg })}\n\n`);
+    }
+
+    res.end();
+
+    // Persist the backtest result to DB after streaming completes
+    if (strategyId && finalResult) {
+      try {
+        const r = finalResult as Record<string, unknown>;
+        const summary = r.summary as Record<string, unknown>;
+        const score = r.score as Record<string, unknown>;
+        await prisma.backtestRun.create({
+          data: {
+            strategyId,
+            userId: guestUserId,
+            status: "COMPLETED",
+            result: r as object,
+            totalReturn: summary.total_return_percent as number,
+            sharpeRatio: summary.sharpe_ratio as number,
+            maxDrawdown: summary.max_drawdown_percent as number,
+            winRate: summary.win_rate as number,
+            profitFactor: summary.profit_factor as number,
+            totalTrades: summary.total_trades as number,
+            score: score.overall as number,
+            grade: score.grade as string,
+            completedAt: new Date(),
+            durationMs: (r.duration_ms as number) ?? null,
+          },
+        });
+
+        await prisma.strategy.update({
+          where: { id: strategyId },
+          data: {
+            score: score.overall as number,
+            grade: score.grade as string,
+            sharpeRatio: summary.sharpe_ratio as number,
+            maxDrawdown: summary.max_drawdown_percent as number,
+            totalReturn: summary.total_return_percent as number,
+          },
+        });
+      } catch (dbErr) {
+        console.error("Failed to persist streaming backtest result:", dbErr);
+      }
+    }
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!res.headersSent) {
+      res.status(500).json({ success: false, error: msg });
+    }
+  }
+});
+
+// ============================================================
 // Delete Strategy
 // ============================================================
 
@@ -303,7 +441,7 @@ strategiesRouter.delete("/strategies/:id", async (req, res) => {
 // Confidence Score
 // ============================================================
 
-strategiesRouter.post("/strategies/confidence", async (req, res) => {
+strategiesRouter.post("/strategies/confidence", confidenceLimiter, async (req, res) => {
   try {
     const { strategy, backtest_result, strategyId } = req.body;
     if (!strategy || !backtest_result) {
