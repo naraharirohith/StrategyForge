@@ -152,7 +152,7 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  <div className="mt-3 flex items-center justify-between">
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-3 text-xs text-slate-500">
                       {totalReturn != null ? (
                         <span className={totalReturn >= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>

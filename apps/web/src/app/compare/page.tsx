@@ -242,13 +242,13 @@ export default function ComparePage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 bg-slate-50">
-                      <th className="px-4 py-3 text-left font-medium text-slate-600">
+                      <th className="px-4 py-3 text-left font-medium text-slate-600 whitespace-nowrap min-w-[100px]">
                         Metric
                       </th>
                       {selectedStrategies.map((s) => (
                         <th
                           key={s.id as string}
-                          className="px-4 py-3 text-left font-medium text-slate-900"
+                          className="px-4 py-3 text-left font-medium text-slate-900 whitespace-nowrap min-w-[120px]"
                         >
                           {s.name as string}
                         </th>
@@ -269,13 +269,13 @@ export default function ComparePage() {
                           key={metric.key}
                           className="border-b border-slate-100 last:border-b-0"
                         >
-                          <td className="px-4 py-3 font-medium text-slate-600">
+                          <td className="px-4 py-3 font-medium text-slate-600 whitespace-nowrap">
                             {metric.label}
                           </td>
                           {selectedStrategies.map((s, idx) => (
                             <td
                               key={s.id as string}
-                              className={`px-4 py-3 text-slate-900 ${
+                              className={`px-4 py-3 text-slate-900 whitespace-nowrap ${
                                 best === idx ? "bg-green-50 font-medium" : ""
                               }`}
                             >

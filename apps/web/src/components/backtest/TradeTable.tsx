@@ -62,32 +62,32 @@ export function TradeTable({ trades, currency = "USD" }: Props) {
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50">
               {["#", "Ticker", "Side", "Entry Date", "Entry Price", "Exit Date", "Exit Price", "P&L", "P&L %", "Hold", "Exit Reason"].map((h) => (
-                <th key={h} className="px-3 py-2 text-left font-medium text-slate-500">{h}</th>
+                <th key={h} className="px-3 py-2 text-left font-medium text-slate-500 whitespace-nowrap">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {visible.map((t, i) => (
               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-3 py-2 text-slate-400">{page * PAGE_SIZE + i + 1}</td>
-                <td className="px-3 py-2 font-medium">{t.ticker}</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 text-slate-400 whitespace-nowrap">{page * PAGE_SIZE + i + 1}</td>
+                <td className="px-3 py-2 font-medium whitespace-nowrap">{t.ticker}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
                   <span className={`rounded px-1.5 py-0.5 font-medium ${t.side === "long" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
                     {t.side}
                   </span>
                 </td>
-                <td className="px-3 py-2 mono text-slate-600">{t.entry_date.split(" ")[0]}</td>
-                <td className="px-3 py-2 mono">{fmtPrice(t.entry_price)}</td>
-                <td className="px-3 py-2 mono text-slate-600">{t.exit_date.split(" ")[0]}</td>
-                <td className="px-3 py-2 mono">{fmtPrice(t.exit_price)}</td>
-                <td className={`px-3 py-2 mono font-medium ${t.pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <td className="px-3 py-2 mono text-slate-600 whitespace-nowrap">{t.entry_date.split(" ")[0]}</td>
+                <td className="px-3 py-2 mono whitespace-nowrap">{fmtPrice(t.entry_price)}</td>
+                <td className="px-3 py-2 mono text-slate-600 whitespace-nowrap">{t.exit_date.split(" ")[0]}</td>
+                <td className="px-3 py-2 mono whitespace-nowrap">{fmtPrice(t.exit_price)}</td>
+                <td className={`px-3 py-2 mono font-medium whitespace-nowrap ${t.pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
                   {fmtPnl(t.pnl)}
                 </td>
-                <td className={`px-3 py-2 mono font-medium ${t.pnl_percent >= 0 ? "text-green-600" : "text-red-600"}`}>
+                <td className={`px-3 py-2 mono font-medium whitespace-nowrap ${t.pnl_percent >= 0 ? "text-green-600" : "text-red-600"}`}>
                   {t.pnl_percent >= 0 ? "+" : ""}{fmt(t.pnl_percent, 1)}%
                 </td>
-                <td className="px-3 py-2 mono text-slate-500">{t.holding_bars}d</td>
-                <td className="px-3 py-2">
+                <td className="px-3 py-2 mono text-slate-500 whitespace-nowrap">{t.holding_bars}d</td>
+                <td className="px-3 py-2 whitespace-nowrap">
                   <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
                     {EXIT_LABELS[t.exit_reason] ?? t.exit_reason}
                   </span>

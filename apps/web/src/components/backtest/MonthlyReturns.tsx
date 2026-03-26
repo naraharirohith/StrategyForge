@@ -91,7 +91,7 @@ export function MonthlyReturns({ monthlyReturns }: Props) {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse min-w-[640px]">
           <thead>
             <tr>
               <th className="px-2 py-1.5 text-left text-xs font-medium text-slate-500 w-14">Year</th>

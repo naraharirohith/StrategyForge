@@ -15,6 +15,22 @@ import { CardSkeleton, ChartSkeleton } from "@/components/Skeleton";
 
 type AnyObj = Record<string, unknown>;
 
+function downloadJson(data: AnyObj, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 const TABS = ["Overview", "Performance", "Trades", "Strategy Logic"] as const;
 type Tab = (typeof TABS)[number];
 
@@ -160,7 +176,25 @@ export default function StrategyDetailPage() {
 
         {/* Header */}
         <div className="mt-4 mb-6">
-          <h1 className="text-2xl font-bold text-slate-900">{name}</h1>
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-2xl font-bold text-slate-900">{name}</h1>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => downloadJson(def, `${slugify(name)}.json`)}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Export JSON
+              </button>
+              {backtest && (
+                <button
+                  onClick={() => downloadJson(backtest, `${slugify(name)}-backtest.json`)}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Export Results
+                </button>
+              )}
+            </div>
+          </div>
           {description && <p className="mt-1 text-sm text-slate-500">{description}</p>}
           <div className="mt-3 flex flex-wrap gap-2">
             {style && (
@@ -197,20 +231,22 @@ export default function StrategyDetailPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-1 rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-          {TABS.map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                tab === t
-                  ? "bg-blue-600 text-white shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
+        <div className="mb-6 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
+          <div className="flex gap-1 min-w-max">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-xs sm:text-sm font-medium transition-colors ${
+                  tab === t
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Tab: Overview */}
@@ -327,7 +363,7 @@ export default function StrategyDetailPage() {
                           </span>
                         </p>
                         {conditions && (
-                          <div className="mt-2 font-mono text-xs text-slate-600 space-y-0.5">
+                          <div className="mt-2 font-mono text-xs text-slate-600 space-y-0.5 overflow-x-auto">
                             {renderConditions(conditions, indicators)}
                           </div>
                         )}
@@ -352,7 +388,7 @@ export default function StrategyDetailPage() {
               {exitRules.length > 0 ? (
                 <div className="space-y-2">
                   {exitRules.map((rule) => (
-                    <div key={rule.id as string} className="flex items-center gap-2 text-sm text-slate-700">
+                    <div key={rule.id as string} className="flex flex-wrap items-center gap-2 text-sm text-slate-700">
                       <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
                         {EXIT_TYPE_LABELS[(rule.type as string)] ?? (rule.type as string)}
                       </span>
@@ -440,8 +476,8 @@ export default function StrategyDetailPage() {
                 <span className="text-xs text-slate-400">{jsonOpen ? "Collapse" : "Expand"}</span>
               </button>
               {jsonOpen && (
-                <div className="border-t border-slate-200 px-6 py-4">
-                  <pre className="max-h-96 overflow-auto rounded-lg bg-slate-50 p-4 text-xs text-slate-600 font-mono">
+                <div className="border-t border-slate-200 px-3 py-4 sm:px-6">
+                  <pre className="max-h-96 overflow-auto rounded-lg bg-slate-50 p-3 sm:p-4 text-xs text-slate-600 font-mono whitespace-pre overflow-x-auto">
                     {JSON.stringify(def, null, 2)}
                   </pre>
                 </div>

@@ -39,6 +39,22 @@ const TEMPLATES = [
 type Step = "idle" | "generating" | "generated" | "backtesting" | "backtested" | "scoring" | "done";
 type AnyObj = Record<string, unknown>;
 
+function downloadJson(data: AnyObj, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
 export default function Home() {
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("gemini");
@@ -173,7 +189,7 @@ export default function Home() {
               ))}
             </div>
           </div>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-2">
             <span className="text-xs text-slate-400">AI Model:</span>
             {[
               { id: "gemini", label: "Gemini Flash", sub: "Free" },
@@ -194,7 +210,7 @@ export default function Home() {
               </button>
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-between">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-slate-400">
               Powered by {provider === "gemini" ? "Gemini Flash" : provider === "claude" ? "Claude" : provider === "openai" ? "GPT-4o" : "OpenRouter"}
             </p>
@@ -237,6 +253,17 @@ export default function Home() {
               onRunBacktest={handleBacktest}
               loading={isBacktesting}
             />
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={() => {
+                  const name = slugify((strategy?.name as string) ?? "strategy");
+                  downloadJson(strategy!, `${name}.json`);
+                }}
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+              >
+                Export JSON
+              </button>
+            </div>
           </div>
         )}
 
@@ -246,6 +273,17 @@ export default function Home() {
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold text-slate-900">Backtest Results</h2>
               <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">5-year period</span>
+              <div className="ml-auto">
+                <button
+                  onClick={() => {
+                    const name = slugify((strategy?.name as string) ?? "strategy");
+                    downloadJson(backtest!, `${name}-backtest.json`);
+                  }}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Export Results
+                </button>
+              </div>
             </div>
 
             {!!backtest.summary && (backtest.summary as any).total_trades < 30 && (

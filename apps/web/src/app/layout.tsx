@@ -24,7 +24,7 @@ export default function RootLayout({
             <a href="/" className="text-lg font-bold text-slate-900">
               Strategy<span className="text-blue-600">Forge</span>
             </a>
-            <nav className="flex gap-4 text-sm">
+            <nav className="flex flex-wrap gap-2 sm:gap-4 text-xs sm:text-sm">
               <a href="/" className="text-slate-600 hover:text-slate-900">Generator</a>
               <a href="/dashboard" className="text-slate-600 hover:text-slate-900">Dashboard</a>
               <a href="/compare" className="text-slate-600 hover:text-slate-900">Compare</a>
