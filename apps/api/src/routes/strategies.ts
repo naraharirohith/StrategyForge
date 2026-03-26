@@ -3,6 +3,183 @@ import { prisma, guestUserId } from "../lib/prisma.js";
 import { generateLimiter, backtestLimiter, confidenceLimiter } from "../middleware/rateLimiter.js";
 
 const ENGINE_URL = process.env.ENGINE_URL || "http://localhost:8001";
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+type StrategyLike = Record<string, any>;
+
+const TIMEFRAME_LIMIT_DAYS: Record<string, number> = {
+  "5m": 59,
+  "15m": 59,
+  "1h": 729,
+  "4h": 729,
+  "1d": 365 * 5,
+  "1w": 365 * 10,
+};
+
+const DEFAULT_WINDOW_DAYS: Record<string, number> = {
+  "5m": 45,
+  "15m": 45,
+  "1h": 365,
+  "4h": 365 * 2,
+  "1d": 365 * 5,
+  "1w": 365 * 10,
+};
+
+const BARS_PER_DAY: Record<string, number> = {
+  "5m": 78,
+  "15m": 26,
+  "1h": 7,
+  "4h": 2,
+  "1d": 1,
+  "1w": 1 / 5,
+};
+
+const TIMEFRAME_FALLBACKS: Record<string, string | undefined> = {
+  "5m": "15m",
+  "15m": "1h",
+  "1h": "4h",
+  "4h": "1d",
+  "1d": undefined,
+  "1w": undefined,
+};
+
+function cloneStrategy<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function formatDate(value: Date): string {
+  return value.toISOString().slice(0, 10);
+}
+
+function parseIsoDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !ISO_DATE_RE.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function daysBetween(start: Date, end: Date): number {
+  return Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000));
+}
+
+function getIndicatorLookback(indicator: Record<string, any>): number {
+  const params = indicator.params ?? {};
+  const type = String(indicator.type ?? "").toUpperCase();
+
+  switch (type) {
+    case "MACD":
+      return Math.max(Number(params.slow ?? 26), Number(params.signal ?? 9)) + 5;
+    case "ICHIMOKU":
+      return Math.max(
+        Number(params.tenkan ?? 9),
+        Number(params.kijun ?? 26) * 2,
+        Number(params.senkou_b ?? 52) + Number(params.kijun ?? 26),
+      );
+    case "STOCH":
+      return Number(params.k_period ?? 14) + Number(params.d_period ?? 3);
+    case "SUPERTREND":
+    case "ATR":
+    case "ADX":
+    case "CCI":
+    case "RSI":
+    case "WILLIAMS_R":
+    case "MFI":
+    case "SMA":
+    case "EMA":
+    case "WMA":
+    case "BBANDS":
+    case "DONCHIAN":
+    case "KELTNER":
+    case "VOLUME_SMA":
+    case "PRICE_CHANGE_PCT":
+    case "HIGH_LOW_RANGE":
+      return Number(params.period ?? 20);
+    default:
+      return 20;
+  }
+}
+
+function estimateRequiredBars(strategy: StrategyLike): number {
+  const indicators = Array.isArray(strategy.indicators) ? strategy.indicators : [];
+  const maxLookback = indicators.reduce((max: number, indicator: Record<string, any>) => {
+    return Math.max(max, getIndicatorLookback(indicator));
+  }, 20);
+
+  return maxLookback + 40;
+}
+
+function estimateAvailableBars(timeframe: string, startDate: Date, endDate: Date): number {
+  const barsPerDay = BARS_PER_DAY[timeframe] ?? 1;
+  return Math.floor(daysBetween(startDate, endDate) * barsPerDay);
+}
+
+function normalizeBacktestWindow(strategy: StrategyLike, notes: string[]): StrategyLike {
+  const normalized = cloneStrategy(strategy);
+  const timeframe = String(normalized.timeframe ?? "1d");
+  const limitDays = TIMEFRAME_LIMIT_DAYS[timeframe] ?? TIMEFRAME_LIMIT_DAYS["1d"];
+  const defaultDays = DEFAULT_WINDOW_DAYS[timeframe] ?? DEFAULT_WINDOW_DAYS["1d"];
+  const today = new Date();
+
+  const currentConfig = (normalized.backtest_config ?? {}) as Record<string, any>;
+  const nextConfig = { ...currentConfig };
+  let endDate = parseIsoDate(currentConfig.end_date) ?? today;
+  if (endDate > today) endDate = today;
+
+  let startDate = parseIsoDate(currentConfig.start_date);
+  if (!startDate) {
+    startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - defaultDays);
+    notes.push(`Set a ${defaultDays}-day lookback for ${timeframe} data.`);
+  }
+
+  const requestedDays = daysBetween(startDate, endDate);
+  if (requestedDays > limitDays) {
+    startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - limitDays);
+    notes.push(`Trimmed the backtest window to ${limitDays} days because ${timeframe} data is not reliably available beyond that.`);
+  }
+
+  nextConfig.start_date = formatDate(startDate);
+  nextConfig.end_date = formatDate(endDate);
+  normalized.backtest_config = nextConfig;
+
+  return normalized;
+}
+
+function applyBacktestPreflight(strategy: StrategyLike) {
+  const notes: string[] = [];
+  let adjusted = normalizeBacktestWindow(strategy, notes);
+
+  while (true) {
+    const timeframe = String(adjusted.timeframe ?? "1d");
+    const config = (adjusted.backtest_config ?? {}) as Record<string, any>;
+    const startDate = parseIsoDate(config.start_date) ?? new Date(`${formatDate(new Date())}T00:00:00.000Z`);
+    const endDate = parseIsoDate(config.end_date) ?? new Date(`${formatDate(new Date())}T00:00:00.000Z`);
+    const requiredBars = estimateRequiredBars(adjusted);
+    const availableBars = estimateAvailableBars(timeframe, startDate, endDate);
+    const fallback = TIMEFRAME_FALLBACKS[timeframe];
+
+    if (availableBars >= requiredBars || !fallback) {
+      return {
+        strategy: adjusted,
+        notes,
+        adjusted: notes.length > 0,
+        diagnostics: {
+          timeframe,
+          required_bars: requiredBars,
+          available_bars: availableBars,
+          start_date: config.start_date,
+          end_date: config.end_date,
+        },
+      };
+    }
+
+    const previousTimeframe = timeframe;
+    adjusted = cloneStrategy(adjusted);
+    adjusted.timeframe = fallback;
+    notes.push(`Switched timeframe from ${previousTimeframe} to ${fallback} so the strategy has enough history for its longest indicator lookback.`);
+    adjusted = normalizeBacktestWindow(adjusted, notes);
+  }
+}
 
 export const strategiesRouter = Router();
 
@@ -193,6 +370,8 @@ strategiesRouter.post("/strategies/backtest", backtestLimiter, async (req, res) 
       return res.status(400).json({ error: "Strategy definition is required" });
     }
 
+    const preflight = applyBacktestPreflight(strategy);
+
     // Forward to Python engine
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120_000);
@@ -201,7 +380,7 @@ strategiesRouter.post("/strategies/backtest", backtestLimiter, async (req, res) 
       const engineRes = await fetch(`${ENGINE_URL}/backtest`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy }),
+        body: JSON.stringify({ strategy: preflight.strategy }),
         signal: controller.signal,
       });
       clearTimeout(timeout);
@@ -250,7 +429,14 @@ strategiesRouter.post("/strategies/backtest", backtestLimiter, async (req, res) 
         });
       }
 
-      res.json(data);
+      res.json({
+        ...data,
+        preflight: {
+          adjusted: preflight.adjusted,
+          notes: preflight.notes,
+          diagnostics: preflight.diagnostics,
+        },
+      });
     } catch (e: unknown) {
       clearTimeout(timeout);
       if (e instanceof Error && e.name === "AbortError") {
@@ -277,6 +463,8 @@ strategiesRouter.post("/strategies/backtest/stream", backtestLimiter, async (req
       return res.status(400).json({ error: "Strategy definition is required" });
     }
 
+    const preflight = applyBacktestPreflight(strategy);
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 120_000);
 
@@ -286,13 +474,21 @@ strategiesRouter.post("/strategies/backtest/stream", backtestLimiter, async (req
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    if (preflight.adjusted) {
+      res.write(`event: progress\ndata: ${JSON.stringify({
+        stage: "preflight",
+        message: preflight.notes[preflight.notes.length - 1] ?? "Adjusted backtest settings for data availability.",
+        percent: 5,
+      })}\n\n`);
+    }
+
     let finalResult: Record<string, unknown> | null = null;
 
     try {
       const engineRes = await fetch(`${ENGINE_URL}/backtest/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ strategy }),
+        body: JSON.stringify({ strategy: preflight.strategy }),
         signal: controller.signal,
       });
 
