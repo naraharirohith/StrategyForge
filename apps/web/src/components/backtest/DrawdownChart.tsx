@@ -23,17 +23,17 @@ export function DrawdownChart({ drawdownCurve }: Props) {
           <XAxis
             dataKey="date"
             tick={{ fontSize: 11 }}
-            tickFormatter={(v) => v.slice(0, 7)}
+            tickFormatter={(v: any) => String(v).slice(0, 7)}
             interval="preserveStartEnd"
           />
           <YAxis
             tick={{ fontSize: 11 }}
-            tickFormatter={(v) => `${v.toFixed(0)}%`}
+            tickFormatter={(v: any) => `${Number(v).toFixed(0)}%`}
             width={45}
           />
           <Tooltip
-            formatter={(v: number) => [`${v.toFixed(2)}%`, "Drawdown"]}
-            labelFormatter={(l) => fmtDate(l)}
+            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Drawdown"]}
+            labelFormatter={(l: any) => fmtDate(l)}
           />
           <Area
             type="monotone"
