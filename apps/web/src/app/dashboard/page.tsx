@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getStrategies } from "@/lib/api";
+import { getStrategies, deleteStrategy } from "@/lib/api";
 import { fmtDate, gradeColor, fmt } from "@/lib/utils";
+import { CardSkeleton } from "@/components/Skeleton";
 
 type AnyObj = Record<string, unknown>;
 
@@ -26,6 +27,7 @@ export default function DashboardPage() {
   const [strategies, setStrategies] = useState<AnyObj[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -40,6 +42,19 @@ export default function DashboardPage() {
     }
     load();
   }, []);
+
+  async function handleDelete(id: string) {
+    if (!window.confirm("Delete this strategy? This cannot be undone.")) return;
+    setDeleting(id);
+    try {
+      await deleteStrategy(id);
+      setStrategies((prev) => prev.filter((s) => (s.id as string) !== id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to delete strategy");
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -56,9 +71,10 @@ export default function DashboardPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-20 text-sm text-slate-400">
-            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-            Loading strategies...
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <CardSkeleton key={i} />
+            ))}
           </div>
         )}
 
@@ -147,12 +163,21 @@ export default function DashboardPage() {
                       )}
                       <span>{fmtDate(s.createdAt as string)}</span>
                     </div>
-                    <a
-                      href={`/strategy/${s.id as string}`}
-                      className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                    >
-                      View Details &rarr;
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => handleDelete(s.id as string)}
+                        disabled={deleting === (s.id as string)}
+                        className="text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-50"
+                      >
+                        {deleting === (s.id as string) ? "Deleting..." : "Delete"}
+                      </button>
+                      <a
+                        href={`/strategy/${s.id as string}`}
+                        className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                      >
+                        View Details &rarr;
+                      </a>
+                    </div>
                   </div>
                 </div>
               );

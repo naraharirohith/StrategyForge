@@ -55,6 +55,15 @@ export async function getStrategies() {
   return data;
 }
 
+export async function deleteStrategy(id: string) {
+  const res = await fetch(`${API_URL}/api/strategies/${id}`, {
+    method: "DELETE",
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Failed to delete strategy");
+  return data;
+}
+
 export async function getConfidenceScore(
   strategy: Record<string, unknown>,
   backtestResult: Record<string, unknown>,

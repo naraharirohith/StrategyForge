@@ -265,6 +265,41 @@ strategiesRouter.post("/strategies/backtest", async (req, res) => {
 });
 
 // ============================================================
+// Delete Strategy
+// ============================================================
+
+strategiesRouter.delete("/strategies/:id", async (req, res) => {
+  try {
+    const strategy = await prisma.strategy.findUnique({
+      where: { id: req.params.id },
+      select: { userId: true },
+    });
+
+    if (!strategy) {
+      return res.status(404).json({ success: false, error: "Strategy not found" });
+    }
+
+    if (strategy.userId !== guestUserId) {
+      return res.status(403).json({ success: false, error: "Not authorized" });
+    }
+
+    // Delete related records first (backtest runs), then the strategy
+    await prisma.backtestRun.deleteMany({
+      where: { strategyId: req.params.id },
+    });
+
+    await prisma.strategy.delete({
+      where: { id: req.params.id },
+    });
+
+    res.json({ success: true });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// ============================================================
 // Confidence Score
 // ============================================================
 

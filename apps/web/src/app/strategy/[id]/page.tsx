@@ -11,6 +11,7 @@ import { DrawdownChart } from "@/components/backtest/DrawdownChart";
 import { MonthlyReturns } from "@/components/backtest/MonthlyReturns";
 import { TradeTable } from "@/components/backtest/TradeTable";
 import { gradeColor, fmtDate } from "@/lib/utils";
+import { CardSkeleton, ChartSkeleton } from "@/components/Skeleton";
 
 type AnyObj = Record<string, unknown>;
 
@@ -103,11 +104,13 @@ export default function StrategyDetailPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-50">
-        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-          <div className="flex items-center justify-center py-20 text-sm text-slate-400">
-            <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent mr-2" />
-            Loading strategy...
+        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 space-y-6">
+          <CardSkeleton />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <CardSkeleton />
+            <CardSkeleton />
           </div>
+          <ChartSkeleton />
         </div>
       </div>
     );
@@ -141,7 +144,10 @@ export default function StrategyDetailPage() {
   const initialCapital = (backtestConfig.initial_capital as number) ?? 100000;
   const currency = (backtestConfig.currency as string) ?? "USD";
   const score = backtest?.score as AnyObj | undefined;
-  const confidence = backtest?.confidence as AnyObj | undefined;
+  const backtestConfidence = backtest?.confidence as AnyObj | undefined;
+  const strategyConfidence = strategy.confidenceData as AnyObj | undefined;
+  const confidence = backtestConfidence ?? strategyConfidence ?? undefined;
+  const confidenceUpdatedAt = strategy.confidenceUpdatedAt as string | undefined;
   const summary = backtest?.summary as AnyObj | undefined;
   const grade = (strategy.grade as string) ?? (score?.grade as string) ?? null;
   const createdAt = strategy.createdAt as string | undefined;
@@ -214,7 +220,16 @@ export default function StrategyDetailPage() {
             {(score || confidence) && (
               <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {score && <ScoreCard score={score as any} />}
-                {confidence && <ConfidenceCard confidence={confidence as any} />}
+                {confidence && (
+                  <div>
+                    <ConfidenceCard confidence={confidence as any} />
+                    {confidenceUpdatedAt && !backtestConfidence && (
+                      <p className="mt-2 text-xs text-slate-400">
+                        Last updated: {fmtDate(confidenceUpdatedAt)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -224,13 +239,23 @@ export default function StrategyDetailPage() {
             )}
 
             {/* No backtest */}
-            {!backtest && (
+            {!backtest && !confidence && (
               <div className="rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
                 <p className="text-sm text-slate-500">No backtest results available.</p>
                 <p className="mt-1 text-xs text-slate-400">
                   Run a backtest from the{" "}
                   <a href="/" className="text-blue-600 hover:text-blue-700">Generator</a>
                   {" "}to see scores and metrics.
+                </p>
+              </div>
+            )}
+            {!backtest && confidence && (
+              <div className="rounded-xl border border-slate-200 bg-white px-6 py-8 text-center shadow-sm">
+                <p className="text-sm text-slate-500">No backtest results yet. Showing persisted confidence score above.</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Run a backtest from the{" "}
+                  <a href="/" className="text-blue-600 hover:text-blue-700">Generator</a>
+                  {" "}to see full scores and metrics.
                 </p>
               </div>
             )}

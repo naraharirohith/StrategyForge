@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { generateStrategy, runBacktest, getConfidenceScore } from "@/lib/api";
+import { useToast } from "@/components/Toast";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
 import { ScoreCard } from "@/components/score/ScoreCard";
@@ -47,6 +48,7 @@ export default function Home() {
   const [strategyId,  setStrategyId]  = useState<string | null>(null);
   const [backtest,    setBacktest]    = useState<AnyObj | null>(null);
   const [confidence,  setConfidence]  = useState<AnyObj | null>(null);
+  const { toast } = useToast();
 
   async function handleGenerate() {
     if (!prompt.trim()) return;
@@ -62,7 +64,9 @@ export default function Home() {
       setStrategyId(data.strategyId ?? null);
       setStep("generated");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Generation failed");
+      const msg = e instanceof Error ? e.message : "Generation failed";
+      setError(msg);
+      toast(msg);
       setStep("idle");
     }
   }
@@ -89,7 +93,9 @@ export default function Home() {
       }
       setStep("done");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Backtest failed");
+      const msg = e instanceof Error ? e.message : "Backtest failed";
+      setError(msg);
+      toast(msg);
       setStep("generated");
     }
   }
