@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { generateStrategy, runBacktest, streamBacktest, getConfidenceScore } from "@/lib/api";
+import { generateStrategy, streamBacktest, getConfidenceScore } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
@@ -35,6 +35,21 @@ const TEMPLATES = [
   { category: "Multi-Indicator", label: "Triple Confirmation", value: "Multi-indicator strategy requiring triple confirmation: EMA(20) above EMA(50) for trend, RSI(14) between 40-65 for momentum, and MACD histogram positive. Moderate risk, 5% stop loss, 15% take profit, trailing stop 8%. Daily timeframe, US large caps." },
   { category: "Multi-Indicator", label: "India All-Weather", value: "Diversified Indian market strategy using RSI, Bollinger Bands, and ADX across multiple NIFTY50 stocks. Enter on RSI oversold + price near lower Bollinger Band + ADX > 20. Conservative risk, 4% stop loss. Stocks: RELIANCE.NS, TCS.NS, HDFCBANK.NS, BHARTIARTL.NS, ITC.NS." },
 ];
+
+const SAFE_TEMPLATES = TEMPLATES.slice(0, 0).concat([
+  { category: "Momentum", label: "Golden Cross - US Large Caps", value: "Create a daily momentum strategy for AAPL, MSFT, and GOOGL using EMA 20 and EMA 50 with RSI(14) confirmation. Moderate risk. Enter long when EMA 20 crosses above EMA 50 and RSI stays below 65. Use a 5% stop loss, 12% take profit, and a 20-bar time exit. Keep timeframe at 1d." },
+  { category: "Momentum", label: "Breakout - Volume Surge", value: "Create a daily breakout strategy for NVDA, AMZN, META, and TSLA. Use Donchian Channel 20-day breakout, volume SMA(20), and ADX(14). Enter long when price breaks the 20-day high, volume is above volume SMA, and ADX is above 20. Aggressive risk with 7% stop loss, 18% take profit, and trailing stop 8%. Keep timeframe at 1d." },
+  { category: "Momentum", label: "NIFTY Supertrend", value: "Create a daily momentum strategy for RELIANCE.NS, TCS.NS, HDFCBANK.NS, and INFY.NS using Supertrend(10,3), EMA 50, and ADX(14). Enter long when price is above Supertrend, price is above EMA 50, and ADX is above 20. Moderate risk with 5% stop loss and trailing stop 8%. Keep timeframe at 1d." },
+  { category: "Mean Reversion", label: "RSI Oversold Bounce", value: "Create a daily mean reversion strategy for AAPL, MSFT, JPM, JNJ, and SPY. Use RSI(14), EMA 50, and Bollinger Bands(20,2). Buy when RSI drops below 30, price touches the lower Bollinger Band, and price remains above EMA 50. Conservative risk with 3% stop loss, 8% take profit, and exit if RSI rises above 55. Keep timeframe at 1d." },
+  { category: "Mean Reversion", label: "Bollinger Band Reclaim", value: "Create a daily mean reversion strategy for AAPL, GOOGL, MSFT, and AMZN. Use Bollinger Bands(20,2), RSI(14), and ATR(14). Buy when price closes back above the lower Bollinger Band after being below it and RSI is below 35. Conservative risk with 4% stop loss and 8% take profit. Keep timeframe at 1d." },
+  { category: "Mean Reversion", label: "NIFTY RSI Dip Buyer", value: "Create a daily Indian-market mean reversion strategy for RELIANCE.NS, ICICIBANK.NS, HDFCBANK.NS, TCS.NS, and INFY.NS. Use RSI(14), EMA 50, and Bollinger Bands(20,2). Buy when RSI drops below 28, price is near the lower Bollinger Band, and price stays above EMA 50. Conservative risk with 4% stop loss and 10% take profit. Keep timeframe at 1d." },
+  { category: "Swing", label: "MACD Crossover Swing", value: "Create a daily swing trading strategy for NVDA, AAPL, MSFT, AMD, and GOOGL using MACD(12,26,9), EMA 50, and RSI(14). Enter long when MACD crosses above its signal line, price is above EMA 50, and RSI is between 40 and 65. Moderate risk with 6% stop loss, 12% take profit, and trailing stop 8%. Keep timeframe at 1d." },
+  { category: "Swing", label: "Stochastic + EMA Filter", value: "Create a daily swing strategy for SPY, QQQ, AAPL, and MSFT using Stochastic(14,3), EMA 50, and ATR(14). Buy when Stochastic %K crosses above %D below 25 and price is above EMA 50. Moderate risk with 5% stop loss, 10% take profit, and a 12-bar time exit. Keep timeframe at 1d." },
+  { category: "Trend", label: "ADX Trend Rider", value: "Create a daily trend-following strategy for AAPL, NVDA, TSLA, and AMZN using ADX(14), EMA 20, EMA 50, and RSI(14). Enter long when ADX rises above 20, EMA 20 is above EMA 50, and RSI is between 45 and 70. Moderate risk with trailing stop 10% and time exit after 30 bars. Keep timeframe at 1d." },
+  { category: "Trend", label: "Cloud Breakout", value: "Create a daily trend strategy for AAPL, MSFT, and GOOGL using EMA 20, EMA 50, and Donchian Channel 20 instead of very long intraday indicators. Enter long when price closes above the Donchian upper band, EMA 20 is above EMA 50, and RSI is below 70. Conservative risk with 5% stop loss and trailing stop 10%. Keep timeframe at 1d." },
+  { category: "Multi-Indicator", label: "Triple Confirmation", value: "Create a daily multi-indicator strategy for US large caps using EMA 20, EMA 50, RSI(14), and MACD(12,26,9). Enter long only when EMA 20 is above EMA 50, RSI is between 40 and 65, and MACD histogram is positive. Moderate risk with 5% stop loss, 15% take profit, and trailing stop 8%. Keep timeframe at 1d." },
+  { category: "Multi-Indicator", label: "India All-Weather", value: "Create a daily diversified Indian-market strategy for RELIANCE.NS, TCS.NS, HDFCBANK.NS, BHARTIARTL.NS, and ITC.NS using RSI(14), Bollinger Bands(20,2), EMA 50, and ADX(14). Enter long when RSI is recovering from below 35, price is near the lower Bollinger Band, EMA 50 trend is intact, and ADX is above 18. Conservative risk with 4% stop loss and 9% take profit. Keep timeframe at 1d." },
+]);
 
 type Step = "idle" | "generating" | "generated" | "backtesting" | "backtested" | "scoring" | "done";
 type AnyObj = Record<string, unknown>;
@@ -100,7 +115,7 @@ export default function Home() {
         streamBacktest(
           strategy,
           strategyId ?? undefined,
-          (_stage, message, _percent) => {
+          (_stage, message) => {
             setProgressMsg(message);
           },
           (result) => {
@@ -174,7 +189,7 @@ export default function Home() {
           <div className="mt-3">
             <p className="text-xs font-medium text-slate-400 mb-2">Quick templates:</p>
             <div className="flex flex-wrap gap-1.5">
-              {TEMPLATES.map((t) => (
+              {SAFE_TEMPLATES.map((t) => (
                 <button
                   key={t.label}
                   onClick={() => setPrompt(t.value)}

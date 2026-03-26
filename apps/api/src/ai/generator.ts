@@ -131,6 +131,10 @@ You MUST respond with ONLY a valid JSON object conforming to the StrategyDefinit
 - For US market, respect trading hours 09:30-16:00 ET
 - Include at least 2-3 indicators for entry conditions (single indicator strategies are fragile)
 - Use cooldown_bars to prevent overtrading (minimum 3 bars for intraday, 1 bar for daily)
+- Prefer "1d" timeframe unless the user explicitly asks for intraday or hourly trading
+- For 5m or 15m strategies, NEVER use indicator lookbacks above 100 bars
+- For 1h strategies, avoid lookbacks above 200 bars
+- If a requested setup needs very long lookbacks (for example EMA 200, SMA 200, or Ichimoku), prefer 1d timeframe instead of intraday data
 
 ## Description Quality
 
