@@ -1,5 +1,37 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+function buildBacktestWindow(strategy: Record<string, unknown>) {
+  const timeframe = String(strategy.timeframe ?? "1d");
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+
+  const windowDaysByTimeframe: Record<string, number> = {
+    "5m": 45,
+    "15m": 45,
+    "1h": 365,
+    "4h": 365 * 2,
+    "1d": 365 * 5,
+    "1w": 365 * 10,
+  };
+
+  startDate.setDate(startDate.getDate() - (windowDaysByTimeframe[timeframe] ?? windowDaysByTimeframe["1d"]));
+
+  return {
+    start_date: startDate.toISOString().split("T")[0],
+    end_date: endDate.toISOString().split("T")[0],
+  };
+}
+
+function withBacktestWindow(strategy: Record<string, unknown>) {
+  return {
+    ...strategy,
+    backtest_config: {
+      ...(strategy.backtest_config as Record<string, unknown>),
+      ...buildBacktestWindow(strategy),
+    },
+  };
+}
+
 export async function generateStrategy(
   description: string,
   preferences?: Record<string, unknown>,
@@ -19,17 +51,7 @@ export async function runBacktest(
   strategy: Record<string, unknown>,
   strategyId?: string
 ) {
-  const fiveYearsAgo = new Date();
-  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-
-  const strategyWithDates = {
-    ...strategy,
-    backtest_config: {
-      ...(strategy.backtest_config as Record<string, unknown>),
-      start_date: fiveYearsAgo.toISOString().split("T")[0],
-      end_date: new Date().toISOString().split("T")[0],
-    },
-  };
+  const strategyWithDates = withBacktestWindow(strategy);
 
   const res = await fetch(`${API_URL}/api/strategies/backtest`, {
     method: "POST",
@@ -72,18 +94,7 @@ export function streamBacktest(
   onError: (error: string) => void,
 ): () => void {
   const controller = new AbortController();
-
-  const fiveYearsAgo = new Date();
-  fiveYearsAgo.setFullYear(fiveYearsAgo.getFullYear() - 5);
-
-  const strategyWithDates = {
-    ...strategy,
-    backtest_config: {
-      ...(strategy.backtest_config as Record<string, unknown>),
-      start_date: fiveYearsAgo.toISOString().split("T")[0],
-      end_date: new Date().toISOString().split("T")[0],
-    },
-  };
+  const strategyWithDates = withBacktestWindow(strategy);
 
   fetch(`${API_URL}/api/strategies/backtest/stream`, {
     method: "POST",

@@ -1,30 +1,43 @@
 """
 Data fetching service for StrategyForge backtesting engine.
 
-Wraps yfinance to fetch and normalize OHLCV data for various timeframes.
-Handles MultiIndex columns, resampling (e.g. 1h -> 4h), and date range filtering.
-Uses a local file-based cache to avoid redundant yfinance requests.
+Implements a fallback chain across multiple data sources:
+  1. yfinance (free, broad coverage)
+  2. Twelve Data (free tier: 800 req/day, reliable)
+  3. Alpha Vantage (free tier: 25 req/day, daily only)
+
+Each fetch is validated for data quality before caching.
+Uses a local file-based cache to avoid redundant requests.
 """
 
+from typing import Optional
 from services.cache import get_cached, set_cached
+from services.data_sources import YFinanceSource, TwelveDataSource, AlphaVantageSource, DataSource
+from services.data_validator import validate_ohlcv, DataValidationError
 
 
 class DataFetcher:
-    """Fetches and caches OHLCV data from yfinance."""
+    """Fetches and caches OHLCV data with multi-source fallback."""
 
-    TIMEFRAME_MAP = {
-        "5m": {"period": "60d", "interval": "5m"},
-        "15m": {"period": "60d", "interval": "15m"},
-        "1h": {"period": "730d", "interval": "1h"},
-        "4h": {"period": "730d", "interval": "1h"},  # fetch 1h and resample
-        "1d": {"period": "max", "interval": "1d"},
-        "1w": {"period": "max", "interval": "1wk"},
-    }
+    # Ordered fallback chain — tried in sequence until one succeeds
+    _sources: list[DataSource] = [
+        YFinanceSource(),
+        TwelveDataSource(),
+        AlphaVantageSource(),
+    ]
 
     @staticmethod
-    def fetch(ticker: str, timeframe: str, start_date: str = None, end_date: str = None, force_refresh: bool = False):
+    def fetch(
+        ticker: str,
+        timeframe: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        force_refresh: bool = False,
+    ):
         """
-        Fetch OHLCV data for a ticker.
+        Fetch OHLCV data for a ticker using fallback chain.
+
+        Tries each data source in order. Validates data quality before caching.
 
         Args:
             ticker: Stock ticker symbol (e.g. 'AAPL', 'RELIANCE.NS').
@@ -37,11 +50,8 @@ class DataFetcher:
             pandas DataFrame with columns: Open, High, Low, Close, Volume.
 
         Raises:
-            ValueError: If no data is returned for the given ticker/timeframe.
+            ValueError: If no source returned valid data.
         """
-        import yfinance as yf
-        import pandas as pd
-
         # Check cache first
         if not force_refresh:
             try:
@@ -52,41 +62,75 @@ class DataFetcher:
             except Exception:
                 pass  # Cache failure should never block a fetch
 
-        tf_config = DataFetcher.TIMEFRAME_MAP.get(timeframe, {"period": "max", "interval": "1d"})
+        errors = []
 
-        kwargs = {"interval": tf_config["interval"]}
-        if start_date and end_date:
-            kwargs["start"] = start_date
-            kwargs["end"] = end_date
-        else:
-            kwargs["period"] = tf_config["period"]
+        for source in DataFetcher._sources:
+            # Skip sources that don't support this timeframe
+            if not source.supports_timeframe(timeframe):
+                continue
 
-        data = yf.download(ticker, **kwargs, progress=False, auto_adjust=True)
+            try:
+                print(f"Fetching {ticker}/{timeframe} from {source.name}...")
+                raw = source.fetch(ticker, timeframe, start_date, end_date)
 
-        if data.empty:
-            raise ValueError(f"No data returned for {ticker} ({timeframe})")
+                # Validate data quality (auto-fix mode, not strict)
+                validated = validate_ohlcv(raw, ticker, timeframe, strict=False)
 
-        # Handle MultiIndex columns from yfinance
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
+                # Cache the validated result
+                try:
+                    set_cached(ticker, timeframe, validated, start_date, end_date)
+                except Exception:
+                    pass  # Cache failure should never block returning data
 
-        # Ensure standard column names
-        data = data.rename(columns={
-            "Open": "Open", "High": "High", "Low": "Low",
-            "Close": "Close", "Volume": "Volume"
-        })
+                print(f"  -> {source.name}: {len(validated)} bars OK")
+                return validated
 
-        # Resample 1h -> 4h if needed
-        if timeframe == "4h":
-            data = data.resample("4h").agg({
-                "Open": "first", "High": "max", "Low": "min",
-                "Close": "last", "Volume": "sum"
-            }).dropna()
+            except (DataValidationError, ValueError, ImportError) as e:
+                errors.append(f"{source.name}: {e}")
+                continue
+            except Exception as e:
+                errors.append(f"{source.name}: {type(e).__name__}: {e}")
+                continue
 
-        # Cache the result before returning
-        try:
-            set_cached(ticker, timeframe, data, start_date, end_date)
-        except Exception:
-            pass  # Cache failure should never block returning data
+        # All sources failed
+        error_summary = "; ".join(errors)
+        raise ValueError(
+            f"No data source returned valid data for {ticker} ({timeframe}). "
+            f"Errors: {error_summary}"
+        )
 
-        return data
+    @staticmethod
+    def fetch_multi(
+        tickers: list[str],
+        timeframe: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        force_refresh: bool = False,
+    ) -> dict:
+        """
+        Fetch OHLCV data for multiple tickers.
+
+        Returns a dict of {ticker: DataFrame} for tickers that succeeded.
+        Tickers that fail are silently skipped (logged to console).
+
+        Args:
+            tickers: List of ticker symbols.
+            timeframe: Timeframe string.
+            start_date: Optional start date.
+            end_date: Optional end date.
+            force_refresh: Bypass cache.
+
+        Returns:
+            Dict mapping ticker -> DataFrame. May be empty if all fail.
+        """
+        results = {}
+        for ticker in tickers:
+            try:
+                df = DataFetcher.fetch(
+                    ticker, timeframe, start_date, end_date, force_refresh
+                )
+                results[ticker] = df
+            except Exception as e:
+                print(f"Warning: Failed to fetch {ticker}: {e}")
+                continue
+        return results
