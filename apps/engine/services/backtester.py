@@ -17,6 +17,37 @@ import numpy as np
 from .condition_evaluator import evaluate_conditions
 
 
+def _find_atr_value(df, bar_idx: int) -> float | None:
+    """Return the first valid ATR-like indicator value on the current bar."""
+    if df is None or bar_idx < 0:
+        return None
+
+    atr_columns = [
+        col for col in df.columns
+        if str(col).upper().startswith("ATR") or "_ATR" in str(col).upper()
+    ]
+    for column in atr_columns:
+        value = df.iloc[bar_idx][column]
+        if pd.notna(value) and float(value) > 0:
+            return float(value)
+    return None
+
+
+def _calculate_recent_realized_vol(df, bar_idx: int, window: int = 20) -> float | None:
+    """Compute recent realized daily volatility from Close prices up to the current bar."""
+    if df is None or "Close" not in df.columns or bar_idx < 1:
+        return None
+
+    start_idx = max(0, bar_idx - window + 1)
+    close_slice = df.iloc[start_idx:bar_idx + 1]["Close"].astype(float)
+    returns = close_slice.pct_change().dropna()
+    if len(returns) < 2:
+        return None
+
+    realized_vol = float(returns.std())
+    return realized_vol if np.isfinite(realized_vol) and realized_vol > 0 else None
+
+
 def run_backtest_on_df(df, strategy: dict) -> tuple:
     """
     Run the backtest loop on an already-prepared DataFrame (indicators computed, warmup trimmed).
@@ -180,7 +211,7 @@ def _run_backtest_core(
         # --- Check exits first ---
         if position:
             exit_triggered, exit_reason = _check_exits(
-                position, exit_rules, current_price, i
+                position, exit_rules, current_price, i, df=df, indicators=indicators
             )
 
             if exit_triggered:
@@ -207,7 +238,8 @@ def _run_backtest_core(
 
                 if entry_triggered:
                     position = _open_position(
-                        rule, capital, current_price, current_date, i, slippage, commission
+                        rule, capital, current_price, current_date, i, slippage, commission,
+                        df=df, bar_idx=i,
                     )
                     cooldown_tracker[primary_ticker] = i
                     break
@@ -319,7 +351,7 @@ def _run_backtest_multi_core(
             pos["last_unrealized"] = unrealized
 
             exit_triggered, exit_reason = _check_exits(
-                pos, exit_rules, current_price, bar_idx
+                pos, exit_rules, current_price, bar_idx, df=df, indicators=indicators
             )
 
             # Force close if drawdown halt triggered
@@ -371,7 +403,8 @@ def _run_backtest_multi_core(
                     alloc_capital = capital / max(1, max_positions - len(positions))
                     position = _open_position(
                         rule, alloc_capital, current_price,
-                        current_date_str, bar_idx, slippage, commission
+                        current_date_str, bar_idx, slippage, commission,
+                        df=df, bar_idx=bar_idx,
                     )
                     position["last_unrealized"] = 0
                     positions[ticker] = position
@@ -414,6 +447,8 @@ def _check_exits(
     exit_rules: list,
     current_price: float,
     bar_idx: int,
+    df=None,
+    indicators: list | None = None,
 ) -> tuple:
     """
     Check all exit rules against a position.
@@ -465,6 +500,10 @@ def _check_exits(
                         current_price
                     )
 
+        elif rule["type"] in {"indicator", "indicator_based"} and rule.get("conditions"):
+            if df is not None and evaluate_conditions(rule["conditions"], df, bar_idx, indicators or []):
+                return True, "indicator_exit"
+
     return False, ""
 
 
@@ -473,23 +512,44 @@ def _open_position(
     available_capital: float,
     current_price: float,
     current_date: str,
-    bar_idx: int,
+    entry_idx: int,
     slippage: float,
     commission: float,
+    df=None,
+    bar_idx: int | None = None,
 ) -> dict:
     """Create a new position dict from an entry rule."""
     side = rule.get("side", "long")
     sizing = rule.get("position_sizing", {"method": "percent_of_portfolio", "percent": 10})
+    current_bar_idx = entry_idx if bar_idx is None else bar_idx
 
     if sizing["method"] == "percent_of_portfolio":
         alloc = available_capital * (sizing.get("percent", 10) / 100)
     elif sizing["method"] == "fixed_amount":
         alloc = min(sizing.get("amount", 10000), available_capital * 0.95)
+    elif sizing["method"] == "percent_risk":
+        risk_percent = sizing.get("percent", sizing.get("risk_percent", 1)) / 100
+        multiplier = sizing.get("atr_multiplier", 1)
+        atr_value = _find_atr_value(df, current_bar_idx)
+        stop_distance = atr_value * multiplier if atr_value is not None else current_price * 0.02
+        stop_distance = max(stop_distance, current_price * 0.001)
+        risk_amount = available_capital * risk_percent
+        size = risk_amount / stop_distance if stop_distance > 0 else 0
+        alloc = min(available_capital * 0.25, size * current_price)
+    elif sizing["method"] == "volatility_adjusted":
+        target_vol = sizing.get("target_vol", sizing.get("target_volatility", 15)) / 100
+        realized_vol = _calculate_recent_realized_vol(df, current_bar_idx)
+        if realized_vol is not None:
+            vol_scaled_alloc = available_capital * (target_vol / (realized_vol * np.sqrt(252)))
+            alloc = min(available_capital * 0.25, vol_scaled_alloc)
+        else:
+            alloc = available_capital * 0.1
     else:
         alloc = available_capital * 0.1  # fallback
 
+    alloc = max(0.0, min(float(alloc), available_capital))
     entry_price = current_price * (1 + slippage if side == "long" else 1 - slippage)
-    size = alloc / entry_price
+    size = alloc / entry_price if entry_price > 0 else 0
     entry_comm = abs(entry_price * size * commission)
 
     return {
@@ -497,7 +557,7 @@ def _open_position(
         "entry_price": entry_price,
         "entry_date": current_date,
         "size": size,
-        "entry_idx": bar_idx,
+        "entry_idx": entry_idx,
         "entry_commission": entry_comm,
         "highest_since_entry": entry_price,
         "lowest_since_entry": entry_price,
