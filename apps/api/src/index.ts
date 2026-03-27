@@ -6,6 +6,7 @@ import { healthRouter } from "./routes/health.js";
 import { strategiesRouter } from "./routes/strategies.js";
 import { marketplaceRouter } from "./routes/marketplace.js";
 import { marketRouter } from "./routes/market.js";
+import { simpleRouter } from "./routes/simple.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -22,6 +23,7 @@ app.use("/api", healthRouter);
 app.use("/api", strategiesRouter);
 app.use("/api", marketplaceRouter);
 app.use("/api", marketRouter);
+app.use("/api", simpleRouter);
 
 // ============================================================
 // Error handling

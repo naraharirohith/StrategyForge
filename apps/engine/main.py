@@ -32,6 +32,7 @@ from services import (
     MarketSnapshot,
     NewsFetcher,
 )
+from services.strategy_templates import get_template, get_template_list, customize_template
 
 app = FastAPI(title="StrategyForge Engine", version="0.1.0")
 
@@ -669,6 +670,82 @@ async def clear_data_cache():
     from services.cache import clear_cache
     count = clear_cache()
     return {"success": True, "files_cleared": count}
+
+
+# ============================================================
+# Strategy Templates (Phase 3)
+# ============================================================
+
+@app.get("/templates")
+async def list_templates():
+    """List all available strategy templates with metadata."""
+    return {"success": True, "templates": get_template_list()}
+
+
+@app.get("/templates/{template_id}")
+async def get_template_endpoint(template_id: str):
+    """Get a full strategy template by ID."""
+    template = get_template(template_id)
+    if not template:
+        raise HTTPException(status_code=404, detail=f"Template '{template_id}' not found")
+    return {"success": True, "template": template}
+
+
+class CustomizeTemplateRequest(BaseModel):
+    template_id: str
+    market: Optional[str] = None
+    capital: Optional[float] = None
+    currency: Optional[str] = None
+    tickers: Optional[list[str]] = None
+
+
+@app.post("/templates/customize")
+async def customize_template_endpoint(req: CustomizeTemplateRequest):
+    """Get a template customized with user preferences."""
+    result = customize_template(
+        template_id=req.template_id,
+        market=req.market,
+        capital=req.capital,
+        currency=req.currency,
+        tickers=req.tickers,
+    )
+    if not result:
+        raise HTTPException(status_code=404, detail=f"Template '{req.template_id}' not found")
+    return {"success": True, "strategy": result}
+
+
+# ============================================================
+# Market Intelligence (Phase 2)
+# ============================================================
+
+@app.get("/market-snapshot")
+async def market_snapshot(market: str = "US"):
+    """Get current market snapshot (indices, VIX, sectors, regime)."""
+    try:
+        snapshot = MarketSnapshot.compute(market)
+        return {"success": True, "snapshot": snapshot}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/market-snapshot/prompt")
+async def market_snapshot_prompt(market: str = "US"):
+    """Get market snapshot formatted as text for AI prompt injection."""
+    try:
+        text = MarketSnapshot.get_prompt_context(market)
+        return {"success": True, "prompt_context": text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/news")
+async def news_headlines(market: str = "US", limit: int = 5):
+    """Get recent financial news headlines."""
+    try:
+        headlines = NewsFetcher.fetch_headlines(market, limit)
+        return {"success": True, "headlines": headlines}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 # ============================================================
