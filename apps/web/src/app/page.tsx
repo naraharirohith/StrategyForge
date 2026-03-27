@@ -3,6 +3,7 @@
 import { useState, type ComponentProps } from "react";
 import { generateStrategy, streamBacktest, getConfidenceScore } from "@/lib/api";
 import { useToast } from "@/components/Toast";
+import { SimpleMode } from "@/components/simple/SimpleMode";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
 import { ScoreCard } from "@/components/score/ScoreCard";
@@ -78,7 +79,10 @@ function Spinner({ className = "" }: { className?: string }) {
   return <span className={`inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`} />;
 }
 
+type Mode = "simple" | "expert";
+
 export default function Home() {
+  const [mode, setMode] = useState<Mode>("simple");
   const [prompt, setPrompt] = useState("");
   const [provider, setProvider] = useState<string>("gemini");
   const [step, setStep] = useState<Step>("idle");
@@ -165,8 +169,47 @@ export default function Home() {
     return acc;
   }, {});
 
+  function handleSwitchToExpert(fromStrategy?: AnyObj, fromStrategyId?: string) {
+    setMode("expert");
+    if (fromStrategy) {
+      setStrategy(fromStrategy);
+      setStrategyId(fromStrategyId ?? null);
+      setStep("generated");
+    }
+  }
+
   return (
     <div className="page-shell">
+      <section className="glass-panel flex items-center gap-2 p-2">
+        <button
+          onClick={() => setMode("simple")}
+          className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+            mode === "simple"
+              ? "bg-[color:var(--accent)] text-[color:var(--bg)]"
+              : "text-[color:var(--ink-muted)] hover:text-[color:var(--ink-strong)]"
+          }`}
+        >
+          Simple Mode
+        </button>
+        <button
+          onClick={() => setMode("expert")}
+          className={`rounded-full px-5 py-2.5 text-sm font-semibold transition ${
+            mode === "expert"
+              ? "bg-[color:var(--accent)] text-[color:var(--bg)]"
+              : "text-[color:var(--ink-muted)] hover:text-[color:var(--ink-strong)]"
+          }`}
+        >
+          Expert Mode
+        </button>
+      </section>
+
+      {mode === "simple" && (
+        <section className="glass-panel min-h-[600px] p-7 sm:p-8">
+          <SimpleMode onSwitchToExpert={handleSwitchToExpert} />
+        </section>
+      )}
+
+      {mode === "expert" && (<>
       <section className="grid gap-6 xl:grid-cols-[1.1fr,0.9fr]">
         <div className="glass-panel p-7 sm:p-8">
           <p className="eyebrow">Premium Strategy Lab</p>
@@ -387,6 +430,7 @@ export default function Home() {
           />
         </section>
       )}
+      </>)}
     </div>
   );
 }
