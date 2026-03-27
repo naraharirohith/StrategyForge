@@ -94,6 +94,13 @@ export class OpenAIProvider implements LLMProvider {
 
 const SYSTEM_PROMPT = `You are StrategyForge AI, an expert quantitative strategist. Your job is to generate executable trading strategies based on user requirements.
 
+You will receive MARKET CONTEXT and RECENT NEWS before the user's request. USE this context to:
+- Select appropriate tickers (favor sectors/stocks with momentum aligned to the strategy style)
+- Choose indicators suited to the current market regime (trending → trend-following, range-bound → mean-reversion)
+- Set realistic stop-loss levels based on current volatility (wider in high-VIX, tighter in low-VIX)
+- Mention current market conditions in the strategy description to show awareness
+- If no market context is provided, generate based on the user's request alone
+
 You MUST respond with ONLY a valid JSON object conforming to the StrategyDefinition schema. No markdown, no backticks, no explanation outside the JSON.
 
 ## Schema Rules
@@ -177,11 +184,79 @@ RSI threshold: RSI < 30 → left: {type:indicator, indicator_id:rsi_14}, operato
 Price vs indicator: Close > SMA(200) → left: {type:price, field:close}, operator: gt, right: {type:indicator, indicator_id:sma_200}`;
 
 // ============================================================
+// Market Context Fetcher
+// ============================================================
+
+const ENGINE_URL = process.env.ENGINE_URL || "http://localhost:8001";
+
+interface MarketContext {
+  marketPrompt: string;
+  newsHeadlines: string[];
+}
+
+async function fetchMarketContext(market: string = "US"): Promise<MarketContext> {
+  const result: MarketContext = { marketPrompt: "", newsHeadlines: [] };
+
+  // Fetch market snapshot prompt text from engine
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const res = await fetch(
+      `${ENGINE_URL}/market-snapshot/prompt?market=${encodeURIComponent(market)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    const data = await res.json();
+    if (data.success && data.prompt_context) {
+      result.marketPrompt = data.prompt_context;
+    }
+  } catch (e) {
+    console.warn("Market snapshot fetch failed (non-fatal):", (e as Error).message);
+  }
+
+  // Fetch news headlines from engine
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(
+      `${ENGINE_URL}/news?market=${encodeURIComponent(market)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    const data = await res.json();
+    if (data.headlines && Array.isArray(data.headlines)) {
+      result.newsHeadlines = data.headlines.map((h: { title: string }) => h.title).slice(0, 10);
+    }
+  } catch (e) {
+    // News endpoint may not exist yet (Codex task) — silently skip
+  }
+
+  return result;
+}
+
+// ============================================================
 // User Prompt Builder
 // ============================================================
 
-function buildUserPrompt(input: UserStrategyInput): string {
-  let prompt = `Generate a trading strategy based on this request:\n\n`;
+function buildUserPrompt(input: UserStrategyInput, context?: MarketContext): string {
+  let prompt = "";
+
+  // Inject market context if available
+  if (context?.marketPrompt) {
+    prompt += `${context.marketPrompt}\n\n`;
+  }
+
+  // Inject news if available
+  if (context?.newsHeadlines?.length) {
+    prompt += `[RECENT NEWS]\n`;
+    for (const headline of context.newsHeadlines) {
+      prompt += `- ${headline}\n`;
+    }
+    prompt += `\n`;
+  }
+
+  prompt += `[USER REQUEST]\n`;
+  prompt += `Generate a trading strategy based on this request:\n\n`;
   prompt += `"${input.description}"\n\n`;
 
   if (input.preferences) {
@@ -198,7 +273,7 @@ function buildUserPrompt(input: UserStrategyInput): string {
     if (p.holding_period) prompt += `- Holding period: ${p.holding_period}\n`;
   }
 
-  prompt += `\nRespond with ONLY a JSON object that has EXACTLY these top-level keys: schema_version, name, description, style, risk_level, universe, timeframe, indicators, entry_rules, exit_rules, risk_management, backtest_config. No other text, no markdown.`;
+  prompt += `\nIMPORTANT: Use the market context above to inform your strategy choices — pick tickers and indicators appropriate for the current market regime. Respond with ONLY a JSON object that has EXACTLY these top-level keys: schema_version, name, description, style, risk_level, universe, timeframe, indicators, entry_rules, exit_rules, risk_management, backtest_config. No other text, no markdown.`;
   return prompt;
 }
 
@@ -214,10 +289,20 @@ export class StrategyGenerator {
   }
 
   /**
-   * Generate a strategy from user input (retries once on validation failure)
+   * Generate a strategy from user input (retries once on validation failure).
+   * Fetches current market context to inject into the prompt.
    */
   async generate(input: UserStrategyInput): Promise<StrategyDefinition> {
-    const userPrompt = buildUserPrompt(input);
+    // Fetch market context (non-blocking — uses defaults if unavailable)
+    const market = input.preferences?.market || "US";
+    let context: MarketContext | undefined;
+    try {
+      context = await fetchMarketContext(market);
+    } catch (e) {
+      console.warn("Market context fetch failed (non-fatal):", (e as Error).message);
+    }
+
+    const userPrompt = buildUserPrompt(input, context);
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < 2; attempt++) {
