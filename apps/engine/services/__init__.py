@@ -5,8 +5,10 @@ Re-exports all service classes and functions for convenient imports.
 """
 
 from .data_fetcher import DataFetcher
+from .data_sources import DataSource, YFinanceSource, TwelveDataSource, AlphaVantageSource
+from .data_validator import validate_ohlcv, DataValidationError, get_data_quality_report
 from .indicator_calculator import IndicatorCalculator
-from .backtester import run_backtest, run_backtest_on_df
+from .backtester import run_backtest, run_backtest_on_df, run_backtest_multi
 from .walk_forward import run_walk_forward
 from .score_calculator import ScoreCalculator
 from .confidence_scorer import ConfidenceScorer
@@ -20,9 +22,17 @@ from .cache import get_cached, set_cached, clear_cache
 
 __all__ = [
     "DataFetcher",
+    "DataSource",
+    "YFinanceSource",
+    "TwelveDataSource",
+    "AlphaVantageSource",
+    "validate_ohlcv",
+    "DataValidationError",
+    "get_data_quality_report",
     "IndicatorCalculator",
     "run_backtest",
     "run_backtest_on_df",
+    "run_backtest_multi",
     "run_walk_forward",
     "ScoreCalculator",
     "ConfidenceScorer",
