@@ -30,6 +30,7 @@ from services import (
     ScoreCalculator,
     ConfidenceScorer,
     MarketSnapshot,
+    NewsFetcher,
 )
 
 app = FastAPI(title="StrategyForge Engine", version="0.1.0")
@@ -438,6 +439,22 @@ async def get_market_prompt(market: str = "US"):
         return {"success": True, "prompt_context": prompt_text}
     except Exception as e:
         return {"success": False, "error": str(e)}
+
+
+@app.get("/news")
+async def get_news(market: str = "US", limit: int = 10):
+    """
+    Get recent business headlines for the requested market.
+    Falls back across multiple providers and never raises.
+    """
+    fetcher = NewsFetcher()
+    normalized_market = str(market or "US").upper()
+    headlines = fetcher.fetch_headlines(normalized_market, limit)
+    return {
+        "headlines": headlines,
+        "source": fetcher.last_source,
+        "market": normalized_market,
+    }
 
 
 @app.post("/confidence", response_model=ConfidenceResponse)
