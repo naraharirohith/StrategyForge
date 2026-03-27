@@ -3,8 +3,11 @@ Local file-based OHLCV cache.
 
 Caches yfinance data as pickle files under .cache/ directory.
 Cache policy:
-  - Daily/weekly data: valid for 1 hour
-  - Intraday data (5m, 15m, 1h, 4h): valid for 5 minutes
+  - 5m data: valid for 5 minutes
+  - 15m data: valid for 15 minutes
+  - 1h / 4h data: valid for 1 hour
+  - Daily data: valid for 24 hours
+  - Weekly data: valid for 1 week
   - Force refresh bypasses cache
 """
 
@@ -18,11 +21,11 @@ CACHE_DIR = Path(__file__).parent.parent / ".cache"
 # Max age in seconds
 CACHE_TTL = {
     "5m": 300,      # 5 minutes
-    "15m": 300,
-    "1h": 300,
-    "4h": 300,
-    "1d": 3600,     # 1 hour
-    "1w": 3600,
+    "15m": 900,
+    "1h": 3600,
+    "4h": 3600,
+    "1d": 86400,    # 24 hours
+    "1w": 604800,
 }
 
 
