@@ -222,16 +222,16 @@ export function SimpleMode({
 
       {phase === "chat" && messages.length <= 1 && (
         <div className="mb-4">
-          <p className="mb-2 text-xs font-medium text-slate-400">Quick start:</p>
+          <p className="mb-2 text-xs font-medium text-gray-400">Quick start:</p>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             {QUICK_PROMPTS.map((prompt) => (
               <button
                 key={prompt.label}
                 onClick={() => handleSubmit(prompt.prompt)}
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left text-sm transition-colors hover:border-blue-300 hover:bg-blue-50"
+                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm transition-colors hover:border-blue-500/40 hover:bg-white/[0.08]"
               >
                 <span className="mb-0.5 block text-base">{prompt.emoji}</span>
-                <span className="font-medium text-slate-700">{prompt.label}</span>
+                <span className="font-medium text-gray-300">{prompt.label}</span>
               </button>
             ))}
           </div>
@@ -242,14 +242,14 @@ export function SimpleMode({
         <div className="mb-3 flex gap-2">
           <button
             onClick={handleReset}
-            className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-400 hover:bg-white/[0.08] hover:text-gray-200"
           >
             Try another idea
           </button>
         </div>
       )}
 
-      <div className="border-t border-slate-200 pt-3">
+      <div className="border-t border-white/10 pt-3">
         <div className="flex gap-2">
           <input
             type="text"
@@ -258,7 +258,7 @@ export function SimpleMode({
             onKeyDown={(event) => event.key === "Enter" && !event.shiftKey && handleSubmit()}
             placeholder={isProcessing ? "Working on it..." : "Describe your investment idea..."}
             disabled={isProcessing}
-            className="flex-1 rounded-lg border border-slate-200 px-3 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100 disabled:opacity-50"
+            className="flex-1 rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:opacity-50"
           />
           <button
             onClick={() => handleSubmit()}
@@ -270,22 +270,22 @@ export function SimpleMode({
         </div>
         <div className="mt-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">AI:</span>
+            <span className="text-xs text-gray-500">AI:</span>
             {["gemini", "openrouter", "claude", "openai"].map((item) => (
               <button
                 key={item}
                 onClick={() => setProvider(item)}
                 className={`rounded-full border px-2 py-0.5 text-xs ${
                   provider === item
-                    ? "border-blue-400 bg-blue-50 text-blue-700"
-                    : "border-slate-200 text-slate-400 hover:border-slate-300"
+                    ? "border-blue-500 bg-blue-500/15 text-blue-400"
+                    : "border-white/10 text-gray-500 hover:text-gray-300"
                 }`}
               >
                 {item === "gemini" ? "Gemini" : item === "openrouter" ? "OpenRouter" : item === "claude" ? "Claude" : "GPT-4o"}
               </button>
             ))}
           </div>
-          <p className="text-xs text-slate-400">For educational purposes only.</p>
+          <p className="text-xs text-gray-500">For educational purposes only.</p>
         </div>
       </div>
     </div>
@@ -305,12 +305,12 @@ function MessageBubble({
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
         className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm ${
-          isUser ? "bg-blue-600 text-white" : "border border-slate-200 bg-white text-slate-800"
+          isUser ? "bg-blue-600 text-white" : "border border-white/10 bg-white/5 text-gray-200"
         }`}
       >
         {message.loading && (
           <span className="inline-flex items-center gap-2">
-            <Spinner className={isUser ? "text-white" : "text-blue-500"} />
+            <Spinner className={isUser ? "text-white" : "text-blue-400"} />
             {message.content}
           </span>
         )}
@@ -338,25 +338,25 @@ function MessageBubble({
           <div className="mt-3 space-y-3">
             <div className="flex items-center gap-2">
               <VerdictBadge verdict={message.translation.verdict} />
-              <span className="text-xs text-slate-500">{message.translation.comparison}</span>
+              <span className="text-xs text-gray-500">{message.translation.comparison}</span>
             </div>
 
             <ul className="space-y-1.5">
               {message.translation.bullets.map((bullet, index) => (
-                <li key={index} className="flex gap-2 text-sm text-slate-700">
-                  <span className="shrink-0 text-slate-400">-</span>
+                <li key={index} className="flex gap-2 text-sm text-gray-300">
+                  <span className="shrink-0 text-gray-500">-</span>
                   <span>{bullet}</span>
                 </li>
               ))}
             </ul>
 
-            <p className="rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-700">{message.translation.suggestion}</p>
-            <p className="text-xs italic text-slate-400">{message.translation.risk_warning}</p>
+            <p className="rounded-lg bg-blue-500/10 px-3 py-2 text-sm text-blue-300">{message.translation.suggestion}</p>
+            <p className="text-xs italic text-gray-500">{message.translation.risk_warning}</p>
 
             <div className="flex flex-wrap gap-2 pt-1">
               <button
                 onClick={() => onSwitchToExpert(message.strategy, message.strategyId)}
-                className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-gray-400 hover:bg-white/5 hover:text-gray-200"
               >
                 View full details
               </button>
@@ -374,7 +374,7 @@ function MessageBubble({
                     document.body.removeChild(anchor);
                     URL.revokeObjectURL(url);
                   }}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-xs font-medium text-gray-400 hover:bg-white/5 hover:text-gray-200"
                 >
                   Export JSON
                 </button>
@@ -391,7 +391,7 @@ function Chip({ children, variant = "default" }: { children: React.ReactNode; va
   return (
     <span
       className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-        variant === "blue" ? "bg-blue-100 text-blue-700" : "bg-slate-100 text-slate-600"
+        variant === "blue" ? "bg-blue-500/20 text-blue-400" : "bg-white/10 text-gray-300"
       }`}
     >
       {children}
@@ -401,10 +401,10 @@ function Chip({ children, variant = "default" }: { children: React.ReactNode; va
 
 function VerdictBadge({ verdict }: { verdict: "great" | "good" | "okay" | "poor" }) {
   const styles: Record<typeof verdict, string> = {
-    great: "bg-green-100 text-green-800",
-    good: "bg-blue-100 text-blue-800",
-    okay: "bg-amber-100 text-amber-800",
-    poor: "bg-red-100 text-red-800",
+    great: "bg-green-500/20 text-green-400",
+    good: "bg-blue-500/20 text-blue-400",
+    okay: "bg-amber-500/20 text-amber-400",
+    poor: "bg-red-500/20 text-red-400",
   };
   const labels: Record<typeof verdict, string> = {
     great: "Strong",

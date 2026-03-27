@@ -1,9 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Download, FileJson, ShieldCheck } from "lucide-react";
 import { getStrategy } from "@/lib/api";
 import { ScoreCard } from "@/components/score/ScoreCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
@@ -12,28 +10,20 @@ import { EquityCurve } from "@/components/backtest/EquityCurve";
 import { DrawdownChart } from "@/components/backtest/DrawdownChart";
 import { MonthlyReturns } from "@/components/backtest/MonthlyReturns";
 import { TradeTable } from "@/components/backtest/TradeTable";
-import { MethodologyDisclosure } from "@/components/backtest/MethodologyDisclosure";
 import { gradeColor, fmtDate } from "@/lib/utils";
-import { CardSkeleton, ChartSkeleton, TableSkeleton } from "@/components/Skeleton";
+import { CardSkeleton, ChartSkeleton } from "@/components/Skeleton";
 
 type AnyObj = Record<string, unknown>;
-type ScoreData = ComponentProps<typeof ScoreCard>["score"];
-type ConfidenceData = ComponentProps<typeof ConfidenceCard>["confidence"];
-type SummaryData = ComponentProps<typeof MetricsSummary>["summary"];
-type TradesData = ComponentProps<typeof TradeTable>["trades"];
-type EquityCurveData = ComponentProps<typeof EquityCurve>["equityCurve"];
-type DrawdownCurveData = ComponentProps<typeof DrawdownChart>["drawdownCurve"];
-type MonthlyReturnsData = ComponentProps<typeof MonthlyReturns>["monthlyReturns"];
 
 function downloadJson(data: AnyObj, filename: string) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
 
@@ -45,19 +35,19 @@ const TABS = ["Overview", "Performance", "Trades", "Strategy Logic"] as const;
 type Tab = (typeof TABS)[number];
 
 const STYLE_COLORS: Record<string, string> = {
-  momentum: "border-cyan-300/40 bg-cyan-500/10 text-cyan-100",
-  mean_reversion: "border-fuchsia-300/40 bg-fuchsia-500/10 text-fuchsia-100",
-  swing: "border-indigo-300/40 bg-indigo-500/10 text-indigo-100",
-  positional: "border-teal-300/40 bg-teal-500/10 text-teal-100",
-  intraday: "border-orange-300/40 bg-orange-500/10 text-orange-100",
-  portfolio: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
-  hybrid: "border-white/10 bg-white/5 text-[color:var(--ink-muted)]",
+  momentum: "bg-blue-500/15 text-blue-400 border-blue-500/20",
+  mean_reversion: "bg-purple-500/15 text-purple-400 border-purple-500/20",
+  swing: "bg-indigo-500/15 text-indigo-400 border-indigo-500/20",
+  positional: "bg-teal-500/15 text-teal-400 border-teal-500/20",
+  intraday: "bg-orange-500/15 text-orange-400 border-orange-500/20",
+  portfolio: "bg-green-500/15 text-green-400 border-green-500/20",
+  hybrid: "bg-white/[0.06] text-gray-300 border-white/[0.06]",
 };
 
 const RISK_COLORS: Record<string, string> = {
-  conservative: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
-  moderate: "border-amber-300/40 bg-amber-500/10 text-amber-100",
-  aggressive: "border-rose-300/40 bg-rose-500/10 text-rose-100",
+  conservative: "bg-green-500/15 text-green-400 border-green-500/20",
+  moderate: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
+  aggressive: "bg-red-500/15 text-red-400 border-red-500/20",
 };
 
 const EXIT_TYPE_LABELS: Record<string, string> = {
@@ -65,8 +55,7 @@ const EXIT_TYPE_LABELS: Record<string, string> = {
   take_profit: "Take Profit",
   trailing_stop: "Trailing Stop",
   time_based: "Time Exit",
-  indicator: "Indicator Exit",
-  indicator_based: "Indicator Exit",
+  indicator_based: "Signal Exit",
   break_even: "Break Even",
 };
 
@@ -79,33 +68,6 @@ const OPERATOR_LABELS: Record<string, string> = {
   lte: "<=",
   eq: "=",
 };
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="glass-panel px-6 py-14 text-center">
-      <p className="text-xl font-semibold text-[color:var(--ink-strong)]">{title}</p>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[color:var(--ink-muted)]">{body}</p>
-    </div>
-  );
-}
-
-function LogicCard({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="glass-panel p-6">
-      <p className="eyebrow">{subtitle}</p>
-      <h3 className="mt-2 text-2xl font-semibold text-[color:var(--ink-strong)]">{title}</h3>
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
 
 export default function StrategyDetailPage() {
   const params = useParams();
@@ -121,22 +83,25 @@ export default function StrategyDetailPage() {
 
   const loadStrategy = useCallback(async () => {
     try {
+      // Try API first
       const data = await getStrategy(id);
-      const nextStrategy = data.strategy as AnyObj;
-      setStrategy(nextStrategy);
-      setDefinition((nextStrategy.definition as AnyObj) ?? null);
+      const strat = data.strategy as AnyObj;
+      setStrategy(strat);
+      setDefinition(strat.definition as AnyObj ?? null);
 
-      const backtestRuns = nextStrategy.backtestRuns as AnyObj[] | undefined;
+      // Check for backtest result
+      const backtestRuns = strat.backtestRuns as AnyObj[] | undefined;
       if (backtestRuns && backtestRuns.length > 0) {
-        setBacktest((backtestRuns[0].result as AnyObj) ?? null);
+        setBacktest(backtestRuns[0].result as AnyObj ?? null);
       }
     } catch {
+      // Fallback to localStorage
       try {
         const stored = localStorage.getItem(`strategy_${id}`);
         if (stored) {
           const parsed = JSON.parse(stored) as AnyObj;
           setStrategy(parsed);
-          setDefinition((parsed.definition as AnyObj) ?? parsed);
+          setDefinition(parsed.definition as AnyObj ?? parsed);
         } else {
           setError("Strategy not found");
         }
@@ -154,27 +119,27 @@ export default function StrategyDetailPage() {
 
   if (loading) {
     return (
-      <div className="page-shell">
-        <CardSkeleton />
-        <div className="grid gap-6 lg:grid-cols-2">
+      <div className="min-h-screen">
+        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 space-y-6">
           <CardSkeleton />
-          <CardSkeleton />
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+          <ChartSkeleton />
         </div>
-        <ChartSkeleton />
-        <TableSkeleton />
       </div>
     );
   }
 
   if (error || !strategy) {
     return (
-      <div className="page-shell-tight">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-[color:var(--ink-muted)] transition hover:text-[color:var(--ink-strong)]">
-          <ArrowLeft className="h-4 w-4" />
-          Back to generator
-        </Link>
-        <div className="rounded-[28px] border border-rose-300/30 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">
-          {error || "Strategy not found"}
+      <div className="min-h-screen">
+        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+          <a href="/" className="text-sm text-blue-600 hover:text-blue-700">&larr; Back to Generator</a>
+          <div className="mt-6 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+            {error || "Strategy not found"}
+          </div>
         </div>
       </div>
     );
@@ -185,7 +150,7 @@ export default function StrategyDetailPage() {
   const description = (strategy.description as string) ?? (def.description as string) ?? "";
   const style = (def.style as string) ?? (strategy.style as string) ?? "";
   const riskLevel = (def.risk_level as string) ?? (strategy.riskLevel as string) ?? "";
-  const market = ((def.universe as AnyObj)?.market as string) ?? (strategy.market as string) ?? "";
+  const market = (def.universe as AnyObj)?.market as string ?? (strategy.market as string) ?? "";
   const timeframe = (def.timeframe as string) ?? (strategy.timeframe as string) ?? "";
   const indicators = (def.indicators as AnyObj[]) ?? [];
   const entryRules = (def.entry_rules as AnyObj[]) ?? [];
@@ -204,409 +169,365 @@ export default function StrategyDetailPage() {
   const createdAt = strategy.createdAt as string | undefined;
 
   return (
-    <div className="page-shell">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-[color:var(--ink-muted)] transition hover:text-[color:var(--ink-strong)]">
-          <ArrowLeft className="h-4 w-4" />
-          Back to generator
-        </Link>
-        <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => downloadJson(def, `${slugify(name)}.json`)}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[color:var(--ink-strong)] transition hover:border-white/20 hover:bg-white/10"
-          >
-            <FileJson className="h-3.5 w-3.5" />
-            Export strategy
-          </button>
-          {backtest && (
-            <button
-              onClick={() => downloadJson(backtest, `${slugify(name)}-backtest.json`)}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.06] px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-[color:var(--ink-strong)] transition hover:border-white/20 hover:bg-white/10"
-            >
-              <Download className="h-3.5 w-3.5" />
-              Export results
-            </button>
-          )}
-        </div>
-      </div>
+    <div className="min-h-screen">
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+        {/* Navigation */}
+        <a href="/" className="text-sm text-blue-600 hover:text-blue-700">&larr; Back to Generator</a>
 
-      <section className="glass-panel p-7 sm:p-8">
-        <div className="grid gap-6 lg:grid-cols-[1.15fr,0.85fr]">
-          <div>
-            <p className="eyebrow">Strategy Profile</p>
-            <h1 className="display-title mt-3 max-w-3xl text-4xl sm:text-5xl">{name}</h1>
-            {description && (
-              <p className="mt-5 max-w-2xl text-base leading-7 text-[color:var(--ink-muted)]">{description}</p>
+        {/* Header */}
+        <div className="mt-4 mb-6">
+          <div className="flex items-start justify-between gap-4">
+            <h1 className="text-2xl font-bold text-gray-100">{name}</h1>
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => downloadJson(def, `${slugify(name)}.json`)}
+                className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-gray-200"
+              >
+                Export JSON
+              </button>
+              {backtest && (
+                <button
+                  onClick={() => downloadJson(backtest, `${slugify(name)}-backtest.json`)}
+                  className="rounded-lg border border-white/10 px-3 py-1.5 text-sm font-medium text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                >
+                  Export Results
+                </button>
+              )}
+            </div>
+          </div>
+          {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {style && (
+              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${STYLE_COLORS[style] ?? "bg-white/[0.06] text-gray-400 border-white/[0.06]"}`}>
+                {style.replace(/_/g, " ")}
+              </span>
             )}
-            <div className="mt-6 flex flex-wrap gap-2">
-              {style && (
-                <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${STYLE_COLORS[style] ?? STYLE_COLORS.hybrid}`}>
-                  {style.replace(/_/g, " ")}
-                </span>
-              )}
-              {riskLevel && (
-                <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${RISK_COLORS[riskLevel] ?? STYLE_COLORS.hybrid}`}>
-                  {riskLevel} risk
-                </span>
-              )}
-              {market && (
-                <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                  {market}
-                </span>
-              )}
-              {timeframe && (
-                <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                  {timeframe} chart
-                </span>
-              )}
-              {grade && (
-                <span className={`rounded-full border px-3 py-1 text-[11px] font-bold ${gradeColor(grade)}`}>
-                  Grade {grade}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-3">
-            <div className="soft-panel p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">Created</p>
-              <p className="mt-3 text-lg font-semibold text-[color:var(--ink-strong)]">
-                {createdAt ? fmtDate(createdAt) : "Unknown"}
-              </p>
-            </div>
-            <div className="soft-panel p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">Universe</p>
-              <p className="mt-3 text-lg font-semibold text-[color:var(--ink-strong)]">{market || "Flexible"}</p>
-            </div>
-            <div className="soft-panel p-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">Protection</p>
-              <p className="mt-3 flex items-center gap-2 text-lg font-semibold text-[color:var(--ink-strong)]">
-                <ShieldCheck className="h-4 w-4 text-[color:var(--accent)]" />
-                {Object.keys(riskMgmt).length > 0 ? "Defined" : "Minimal"}
-              </p>
-            </div>
+            {riskLevel && (
+              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${RISK_COLORS[riskLevel] ?? "bg-white/[0.06] text-gray-400 border-white/[0.06]"}`}>
+                {riskLevel} risk
+              </span>
+            )}
+            {market && (
+              <span className="inline-flex items-center rounded border border-white/[0.06] bg-transparent px-2 py-0.5 text-xs text-gray-400">
+                {market}
+              </span>
+            )}
+            {timeframe && (
+              <span className="inline-flex items-center rounded border border-white/[0.06] bg-transparent px-2 py-0.5 text-xs text-gray-400">
+                {timeframe} chart
+              </span>
+            )}
+            {grade && (
+              <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold ${gradeColor(grade)}`}>
+                Grade {grade}
+              </span>
+            )}
+            {createdAt && (
+              <span className="inline-flex items-center text-xs text-gray-500">
+                Created {fmtDate(createdAt)}
+              </span>
+            )}
           </div>
         </div>
-      </section>
 
-      <section className="glass-panel overflow-x-auto p-2">
-        <div className="flex min-w-max gap-2">
-          {TABS.map((nextTab) => (
-            <button
-              key={nextTab}
-              onClick={() => setTab(nextTab)}
-              className={`rounded-full px-4 py-2.5 text-sm font-medium transition ${
-                tab === nextTab
-                  ? "bg-[color:var(--accent)] text-[color:var(--bg)] shadow-[0_14px_34px_rgba(234,174,88,0.24)]"
-                  : "text-[color:var(--ink-muted)] hover:bg-white/[0.06] hover:text-[color:var(--ink-strong)]"
-              }`}
-            >
-              {nextTab}
-            </button>
-          ))}
+        {/* Tabs */}
+        <div className="mb-6 overflow-x-auto rounded-lg border border-white/[0.06] bg-[#111118] p-1">
+          <div className="flex gap-1 min-w-max">
+            {TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`flex-1 whitespace-nowrap rounded-md px-3 py-2 text-xs sm:text-sm font-medium transition-colors ${
+                  tab === t
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-400 hover:bg-white/5 hover:text-gray-200"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
         </div>
-      </section>
 
-      {tab === "Overview" && (
-        <div className="space-y-6">
-          {(score || confidence) && (
-            <section className="grid gap-6 xl:grid-cols-2">
-              {score && <ScoreCard score={score as unknown as ScoreData} />}
-              {confidence && (
-                <div>
-                  <ConfidenceCard confidence={confidence as unknown as ConfidenceData} />
-                  {confidenceUpdatedAt && !backtestConfidence && (
-                    <p className="mt-3 text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                      Confidence updated {fmtDate(confidenceUpdatedAt)}
-                    </p>
-                  )}
-                </div>
-              )}
-            </section>
-          )}
+        {/* Tab: Overview */}
+        {tab === "Overview" && (
+          <div className="space-y-6">
+            {/* Score + Confidence */}
+            {(score || confidence) && (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                {score && <ScoreCard score={score as any} />}
+                {confidence && (
+                  <div>
+                    <ConfidenceCard confidence={confidence as any} />
+                    {confidenceUpdatedAt && !backtestConfidence && (
+                      <p className="mt-2 text-xs text-gray-500">
+                        Last updated: {fmtDate(confidenceUpdatedAt)}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {summary && <MetricsSummary summary={summary as unknown as SummaryData} />}
+            {/* Metrics */}
+            {summary && (
+              <MetricsSummary summary={summary as any} />
+            )}
 
-          {!backtest && !confidence && (
-            <EmptyState
-              title="No backtest results available."
-              body="Run a backtest from the generator to populate scorecards, equity curves, and trade-level evidence for this strategy."
-            />
-          )}
+            {/* No backtest */}
+            {!backtest && !confidence && (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
+                <p className="text-sm text-gray-400">No backtest results available.</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Run a backtest from the{" "}
+                  <a href="/" className="text-blue-600 hover:text-blue-700">Generator</a>
+                  {" "}to see scores and metrics.
+                </p>
+              </div>
+            )}
+            {!backtest && confidence && (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-8 text-center">
+                <p className="text-sm text-gray-400">No backtest results yet. Showing persisted confidence score above.</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Run a backtest from the{" "}
+                  <a href="/" className="text-blue-600 hover:text-blue-700">Generator</a>
+                  {" "}to see full scores and metrics.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
-          {!backtest && confidence && (
-            <EmptyState
-              title="Confidence is saved, but performance is missing."
-              body="The live conviction model is available above, but a full backtest is still needed to unlock performance and trade statistics."
-            />
-          )}
+        {/* Tab: Performance */}
+        {tab === "Performance" && (
+          <div className="space-y-6">
+            {backtest ? (
+              <>
+                {backtest.equity_curve && (
+                  <EquityCurve
+                    equityCurve={backtest.equity_curve as [string, number][]}
+                    initialCapital={initialCapital}
+                    currency={currency}
+                  />
+                )}
+                {backtest.drawdown_curve && (
+                  <DrawdownChart drawdownCurve={backtest.drawdown_curve as [string, number][]} />
+                )}
+                {backtest.monthly_returns && (
+                  <MonthlyReturns monthlyReturns={backtest.monthly_returns as { month: string; return_percent: number }[]} />
+                )}
+              </>
+            ) : (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
+                <p className="text-sm text-gray-400">No performance data available.</p>
+              </div>
+            )}
+          </div>
+        )}
 
-          <MethodologyDisclosure currency={currency} />
-        </div>
-      )}
+        {/* Tab: Trades */}
+        {tab === "Trades" && (
+          <div>
+            {backtest?.trades ? (
+              <TradeTable trades={backtest.trades as any[]} currency={currency} />
+            ) : (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
+                <p className="text-sm text-gray-400">No trade data available.</p>
+              </div>
+            )}
+          </div>
+        )}
 
-      {tab === "Performance" && (
-        <div className="space-y-6">
-          {backtest ? (
-            <>
-              {backtest.equity_curve && (
-                <EquityCurve
-                  equityCurve={backtest.equity_curve as unknown as EquityCurveData}
-                  initialCapital={initialCapital}
-                  currency={currency}
-                />
-              )}
-              {backtest.drawdown_curve && (
-                <DrawdownChart drawdownCurve={backtest.drawdown_curve as unknown as DrawdownCurveData} />
-              )}
-              {backtest.monthly_returns && (
-                <MonthlyReturns monthlyReturns={backtest.monthly_returns as unknown as MonthlyReturnsData} />
-              )}
-              <MethodologyDisclosure currency={currency} />
-            </>
-          ) : (
-            <EmptyState
-              title="No performance data available."
-              body="Backtest this strategy to unlock the equity curve, drawdown path, and monthly return map."
-            />
-          )}
-        </div>
-      )}
+        {/* Tab: Strategy Logic */}
+        {tab === "Strategy Logic" && (
+          <div className="space-y-6">
+            {/* Entry Rules */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Entry Rules</h3>
+              {entryRules.length > 0 ? (
+                <div className="space-y-4">
+                  {entryRules.map((rule) => {
+                    const ruleName = rule.name as string;
+                    const side = rule.side as string;
+                    const conditions = rule.conditions as AnyObj | undefined;
+                    const sizing = rule.position_sizing as AnyObj | undefined;
 
-      {tab === "Trades" && (
-        <div className="space-y-6">
-          {backtest?.trades ? (
-            <TradeTable trades={backtest.trades as unknown as TradesData} currency={currency} />
-          ) : (
-            <EmptyState
-              title="No trade log available."
-              body="Once a backtest has run, executed entries and exits will appear here for review."
-            />
-          )}
-        </div>
-      )}
-
-      {tab === "Strategy Logic" && (
-        <div className="grid gap-6 xl:grid-cols-2">
-          <LogicCard title="Entry Rules" subtitle="Signal Logic">
-            {entryRules.length > 0 ? (
-              <div className="space-y-4">
-                {entryRules.map((rule) => {
-                  const ruleName = rule.name as string;
-                  const side = rule.side as string;
-                  const conditions = rule.conditions as AnyObj | undefined;
-                  const sizing = rule.position_sizing as AnyObj | undefined;
-
-                  return (
-                    <div key={(rule.id as string) ?? ruleName} className="rounded-[22px] border border-white/10 bg-white/5 p-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-semibold text-[color:var(--ink-strong)]">{ruleName}</p>
-                        <span
-                          className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.22em] ${
-                            side === "long"
-                              ? "border-emerald-300/40 bg-emerald-500/10 text-emerald-100"
-                              : "border-rose-300/40 bg-rose-500/10 text-rose-100"
-                          }`}
-                        >
-                          {(side ?? "").toUpperCase()}
-                        </span>
-                      </div>
-                      {conditions && (
-                        <div className="mt-4 overflow-x-auto rounded-[18px] border border-white/[0.08] bg-[color:var(--bg-strong)]/[0.60] p-4 font-mono text-xs leading-6 text-[color:var(--ink-muted)]">
-                          {renderConditions(conditions, indicators)}
-                        </div>
-                      )}
-                      {sizing && (
-                        <p className="mt-4 text-sm leading-6 text-[color:var(--ink-muted)]">
-                          Position sizing:{" "}
-                          <span className="text-[color:var(--ink-strong)]">
-                            {sizing.percent ? `${sizing.percent}% of capital` : String(sizing.method ?? "custom").replace(/_/g, " ")}
+                    return (
+                      <div key={rule.id as string} className="rounded-lg border border-white/[0.06] bg-white/[0.06] p-4">
+                        <p className="text-sm font-semibold text-gray-200">
+                          {ruleName}{" "}
+                          <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${
+                            side === "long" ? "bg-green-500/15 text-green-400" : "bg-red-500/10 text-red-400"
+                          }`}>
+                            {(side ?? "").toUpperCase()}
                           </span>
                         </p>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-[color:var(--ink-muted)]">No entry rules defined.</p>
-            )}
-          </LogicCard>
-
-          <LogicCard title="Exit Rules" subtitle="Protection & Profit Taking">
-            {exitRules.length > 0 ? (
-              <div className="space-y-4">
-                {exitRules.map((rule) => {
-                  const type = rule.type as string;
-                  const conditions = rule.conditions as AnyObj | undefined;
-
-                  return (
-                    <div key={(rule.id as string) ?? `${type}-${rule.priority as number}`} className="rounded-[22px] border border-white/10 bg-white/5 p-4">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                          {EXIT_TYPE_LABELS[type] ?? type}
-                        </span>
-                        {rule.priority != null && (
-                          <span className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                            Priority {rule.priority as number}
-                          </span>
+                        {conditions && (
+                          <div className="mt-2 font-mono text-xs text-gray-400 space-y-0.5 overflow-x-auto">
+                            {renderConditions(conditions, indicators)}
+                          </div>
+                        )}
+                        {sizing && (
+                          <p className="mt-2 text-xs text-gray-400">
+                            THEN {side === "long" ? "BUY" : "SELL"}{" "}
+                            {sizing.percent ? `${sizing.percent}% of portfolio` : (sizing.method as string ?? "").replace(/_/g, " ")}
+                          </p>
                         )}
                       </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No entry rules defined.</p>
+              )}
+            </div>
 
-                      {rule.value != null && (
-                        <p className="mt-3 text-sm text-[color:var(--ink-muted)]">
-                          Trigger level: <span className="font-medium text-[color:var(--ink-strong)]">{String(rule.value)}%</span>
-                        </p>
-                      )}
-
-                      {conditions && (
-                        <div className="mt-4 overflow-x-auto rounded-[18px] border border-white/[0.08] bg-[color:var(--bg-strong)]/[0.60] p-4 font-mono text-xs leading-6 text-[color:var(--ink-muted)]">
-                          {renderConditions(conditions, indicators)}
-                        </div>
+            {/* Exit Rules */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Exit Rules</h3>
+              {exitRules.length > 0 ? (
+                <div className="space-y-2">
+                  {exitRules.map((rule) => (
+                    <div key={rule.id as string} className="flex flex-wrap items-center gap-2 text-sm text-gray-300">
+                      <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-medium text-gray-400">
+                        {EXIT_TYPE_LABELS[(rule.type as string)] ?? (rule.type as string)}
+                      </span>
+                      <span>
+                        {rule.value != null ? `at ${rule.value}%` : ""}
+                      </span>
+                      {rule.priority != null && (
+                        <span className="text-xs text-gray-500">Priority {rule.priority as number}</span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-sm text-[color:var(--ink-muted)]">No exit rules defined.</p>
-            )}
-          </LogicCard>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No exit rules defined.</p>
+              )}
+            </div>
 
-          <LogicCard title="Indicators" subtitle="Signal Inputs">
-            {indicators.length > 0 ? (
-              <div className="space-y-3">
-                {indicators.map((indicator) => (
-                  <div key={indicator.id as string} className="rounded-[22px] border border-white/10 bg-white/5 p-4">
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span className="mono rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                        {indicator.id as string}
-                      </span>
-                      <span className="text-base font-semibold text-[color:var(--ink-strong)]">
-                        {indicator.type as string}
-                      </span>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {Object.entries((indicator.params as Record<string, unknown>) ?? {}).map(([key, value]) => (
-                        <span
-                          key={key}
-                          className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs text-[color:var(--ink-muted)]"
-                        >
-                          {key}: <span className="text-[color:var(--ink-strong)]">{String(value)}</span>
-                        </span>
+            {/* Indicators */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Indicators</h3>
+              {indicators.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead>
+                      <tr className="border-b border-white/[0.06] text-xs text-gray-400">
+                        <th className="pb-2 font-medium">ID</th>
+                        <th className="pb-2 font-medium">Type</th>
+                        <th className="pb-2 font-medium">Parameters</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.06]">
+                      {indicators.map((ind) => (
+                        <tr key={ind.id as string}>
+                          <td className="py-2 font-mono text-xs text-gray-400">{ind.id as string}</td>
+                          <td className="py-2">
+                            <span className="rounded bg-white/[0.06] px-2 py-0.5 text-xs font-mono text-gray-300">
+                              {ind.type as string}
+                            </span>
+                          </td>
+                          <td className="py-2 text-xs text-gray-400">
+                            {Object.entries((ind.params as Record<string, unknown>) ?? {}).map(([k, v]) => (
+                              <span key={k} className="mr-2">
+                                {k}: <span className="font-medium">{String(v)}</span>
+                              </span>
+                            ))}
+                          </td>
+                        </tr>
                       ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-[color:var(--ink-muted)]">No indicators defined.</p>
-            )}
-          </LogicCard>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">No indicators defined.</p>
+              )}
+            </div>
 
-          <LogicCard title="Risk Controls" subtitle="Capital Discipline">
-            {Object.keys(riskMgmt).length > 0 ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {riskMgmt.max_portfolio_drawdown_percent != null && (
-                  <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Max Portfolio Drawdown</p>
-                    <p className="mt-2 text-lg font-semibold text-[color:var(--ink-strong)]">
-                      {riskMgmt.max_portfolio_drawdown_percent as number}%
-                    </p>
-                  </div>
-                )}
-                {riskMgmt.max_position_count != null && (
-                  <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Max Positions</p>
-                    <p className="mt-2 text-lg font-semibold text-[color:var(--ink-strong)]">
-                      {riskMgmt.max_position_count as number}
-                    </p>
-                  </div>
-                )}
-                {riskMgmt.max_single_position_percent != null && (
-                  <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Max Single Position</p>
-                    <p className="mt-2 text-lg font-semibold text-[color:var(--ink-strong)]">
-                      {riskMgmt.max_single_position_percent as number}%
-                    </p>
-                  </div>
-                )}
-                {riskMgmt.max_correlated_positions != null && (
-                  <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Max Correlated Positions</p>
-                    <p className="mt-2 text-lg font-semibold text-[color:var(--ink-strong)]">
-                      {riskMgmt.max_correlated_positions as number}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-[color:var(--ink-muted)]">No dedicated risk controls defined.</p>
-            )}
-          </LogicCard>
-
-          <section className="glass-panel overflow-hidden xl:col-span-2">
-            <button
-              onClick={() => setJsonOpen((prev) => !prev)}
-              className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
-            >
-              <div>
-                <p className="eyebrow">Raw Definition</p>
-                <h3 className="mt-2 text-2xl font-semibold text-[color:var(--ink-strong)]">Strategy JSON</h3>
-              </div>
-              <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">
-                {jsonOpen ? "Collapse" : "Expand"}
-              </span>
-            </button>
-            {jsonOpen && (
-              <div className="border-t border-white/[0.08] px-6 py-6">
-                <pre className="max-h-[32rem] overflow-auto rounded-[22px] border border-white/[0.08] bg-[color:var(--bg-strong)]/[0.70] p-5 text-xs leading-6 text-[color:var(--ink-muted)]">
-                  {JSON.stringify(def, null, 2)}
-                </pre>
+            {/* Risk Management */}
+            {Object.keys(riskMgmt).length > 0 && (
+              <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-4">Risk Management</h3>
+                <div className="space-y-1 text-sm text-gray-300">
+                  {riskMgmt.max_portfolio_drawdown_percent != null && (
+                    <p>Max portfolio drawdown: <span className="font-medium">{riskMgmt.max_portfolio_drawdown_percent as number}%</span></p>
+                  )}
+                  {riskMgmt.max_position_count != null && (
+                    <p>Max positions: <span className="font-medium">{riskMgmt.max_position_count as number}</span></p>
+                  )}
+                  {riskMgmt.max_single_position_percent != null && (
+                    <p>Max single position: <span className="font-medium">{riskMgmt.max_single_position_percent as number}%</span></p>
+                  )}
+                  {riskMgmt.max_correlated_positions != null && (
+                    <p>Max correlated positions: <span className="font-medium">{riskMgmt.max_correlated_positions as number}</span></p>
+                  )}
+                </div>
               </div>
             )}
-          </section>
-        </div>
-      )}
 
-      <p className="pb-2 text-center text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">
-        Educational use only. Not investment advice.
-      </p>
+            {/* Raw JSON */}
+            <div className="rounded-2xl border border-white/[0.06] bg-[#111118]">
+              <button
+                onClick={() => setJsonOpen(!jsonOpen)}
+                className="flex w-full items-center justify-between px-6 py-4 text-sm font-medium text-gray-300 hover:bg-white/5"
+              >
+                <span>Raw Strategy JSON</span>
+                <span className="text-xs text-gray-500">{jsonOpen ? "Collapse" : "Expand"}</span>
+              </button>
+              {jsonOpen && (
+                <div className="border-t border-white/[0.06] px-3 py-4 sm:px-6">
+                  <pre className="max-h-96 overflow-auto rounded-lg bg-white/[0.06] p-3 sm:p-4 text-xs text-gray-400 font-mono whitespace-pre overflow-x-auto">
+                    {JSON.stringify(def, null, 2)}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="mt-8 text-center text-xs text-gray-500">
+          For educational purposes only. Not investment advice.
+        </p>
+      </div>
     </div>
   );
 }
 
-function renderConditions(conditionGroup: AnyObj, indicators: AnyObj[]): ReactNode {
-  const logic = conditionGroup.logic as string | undefined;
-  const conditions = conditionGroup.conditions as AnyObj[] | undefined;
+/** Recursively render conditions as human-readable text. */
+function renderConditions(condGroup: AnyObj, indicators: AnyObj[]): React.ReactNode {
+  const logic = condGroup.logic as string | undefined;
+  const conditions = condGroup.conditions as AnyObj[] | undefined;
 
   if (!conditions || conditions.length === 0) return null;
 
   return (
-    <div className="space-y-1">
-      {conditions.map((condition, index) => {
-        if (condition.logic && condition.conditions) {
+    <div className="space-y-0.5">
+      {conditions.map((c, i) => {
+        // Nested condition group
+        if (c.logic && c.conditions) {
           return (
-            <div key={index}>
-              {index > 0 && <span className="font-semibold text-[color:var(--accent)]">{logic ?? "AND"} </span>}
-              {renderConditions(condition, indicators)}
+            <div key={i}>
+              {i > 0 && <span className="text-blue-600 font-semibold">{logic ?? "AND"} </span>}
+              {renderConditions(c, indicators)}
             </div>
           );
         }
 
-        const left = condition.left as AnyObj | undefined;
-        const right = condition.right as AnyObj | undefined;
-        const operator = OPERATOR_LABELS[(condition.operator as string)] ?? (condition.operator as string);
-        const leftText = resolveOperand(left, indicators);
-        const rightText = resolveOperand(right, indicators);
+        const left = c.left as AnyObj | undefined;
+        const right = c.right as AnyObj | undefined;
+        const operator = OPERATOR_LABELS[(c.operator as string)] ?? (c.operator as string);
+
+        const leftStr = resolveOperand(left, indicators);
+        const rightStr = resolveOperand(right, indicators);
 
         return (
-          <p key={(condition.id as string) ?? index}>
-            {index > 0 && <span className="font-semibold text-[color:var(--accent)]">{logic ?? "AND"} </span>}
+          <p key={c.id as string ?? i}>
+            {i > 0 && <span className="text-blue-600 font-semibold">{logic ?? "AND"} </span>}
             <span>IF </span>
-            <span className="text-[color:var(--ink-strong)]">{leftText}</span>
+            <span className="font-medium text-gray-200">{leftStr}</span>
             <span> {operator} </span>
-            <span className="text-[color:var(--ink-strong)]">{rightText}</span>
+            <span className="font-medium text-gray-200">{rightStr}</span>
           </p>
         );
       })}
@@ -614,20 +535,19 @@ function renderConditions(conditionGroup: AnyObj, indicators: AnyObj[]): ReactNo
   );
 }
 
-function resolveOperand(operand: AnyObj | undefined, indicators: AnyObj[]): string {
-  if (!operand) return "?";
-
-  const type = operand.type as string;
-  if (type === "constant") return String(operand.value);
+function resolveOperand(op: AnyObj | undefined, indicators: AnyObj[]): string {
+  if (!op) return "?";
+  const type = op.type as string;
+  if (type === "constant") return String(op.value);
   if (type === "indicator") {
-    const indicatorId = operand.indicator_id as string;
-    const indicator = indicators.find((item) => (item.id as string) === indicatorId);
-    if (indicator) {
-      const period = (indicator.params as AnyObj)?.period;
-      return `${indicator.type as string}(${period ?? ""})`;
+    const indId = op.indicator_id as string;
+    const ind = indicators.find((i) => (i.id as string) === indId);
+    if (ind) {
+      const period = (ind.params as AnyObj)?.period;
+      return `${ind.type as string}(${period ?? ""})`;
     }
-    return indicatorId;
+    return indId;
   }
-  if (type === "price") return (operand.field as string) ?? "price";
-  return String(operand.value ?? operand.indicator_id ?? "?");
+  if (type === "price") return (op.field as string) ?? "price";
+  return String(op.value ?? op.indicator_id ?? "?");
 }

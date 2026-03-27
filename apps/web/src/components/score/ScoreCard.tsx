@@ -1,5 +1,4 @@
 "use client";
-
 import { gradeColor, scoreColor, fmt } from "@/lib/utils";
 
 interface Props {
@@ -23,63 +22,62 @@ const LABELS: Record<string, string> = {
 
 export function ScoreCard({ score }: Props) {
   return (
-    <section className="glass-panel overflow-hidden">
-      <div className="grid gap-6 border-b border-white/[0.08] px-6 py-6 lg:grid-cols-[1fr,auto]">
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
+      <div className="flex items-start justify-between">
         <div>
-          <p className="eyebrow">Strategy Score</p>
-          <div className="mt-3 flex items-end gap-3">
-            <span className={`mono text-6xl font-semibold ${scoreColor(score.overall)}`}>{fmt(score.overall, 1)}</span>
-            <span className="pb-2 text-sm uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">out of 100</span>
-          </div>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-sm font-bold ${gradeColor(score.grade)}`}>
+          <p className="text-sm font-medium text-gray-400">Strategy Score</p>
+          <p className={`mt-1 text-5xl font-bold mono ${scoreColor(score.overall)}`}>
+            {fmt(score.overall, 1)}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <span className={`inline-flex items-center rounded border px-2 py-0.5 text-sm font-bold ${gradeColor(score.grade)}`}>
               Grade {score.grade}
             </span>
             {score.verified && (
-              <span className="inline-flex items-center rounded-full border border-cyan-300/40 bg-cyan-500/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-cyan-100">
-                Verified
+              <span className="inline-flex items-center rounded border border-blue-500/20 bg-blue-500/10 px-2 py-0.5 text-xs text-blue-400">
+                ✓ Verified
               </span>
             )}
             {score.publishable && !score.verified && (
-              <span className="inline-flex items-center rounded-full border border-emerald-300/40 bg-emerald-500/10 px-3 py-1 text-xs uppercase tracking-[0.22em] text-emerald-100">
+              <span className="inline-flex items-center rounded border border-green-500/20 bg-green-500/10 px-2 py-0.5 text-xs text-green-400">
                 Publishable
               </span>
             )}
           </div>
         </div>
-
-        <div
-          className="relative h-28 w-28 rounded-full border border-white/[0.12]"
-          style={{
-            background: `conic-gradient(from 180deg, var(--accent) 0deg ${Math.max(0, Math.min(100, score.overall)) * 3.6}deg, rgba(255,255,255,0.08) 0deg)`,
-          }}
-        >
-          <div className="absolute inset-[10px] rounded-full border border-white/10 bg-[color:var(--bg-strong)]" />
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="mono text-3xl font-semibold text-[color:var(--ink-strong)]">{Math.round(score.overall)}</span>
-            <span className="text-[10px] uppercase tracking-[0.28em] text-[color:var(--ink-soft)]">score</span>
-          </div>
+        <div className="relative h-20 w-20">
+          <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90">
+            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+            <circle
+              cx="18" cy="18" r="15.9" fill="none"
+              stroke={score.overall >= 70 ? "#16a34a" : score.overall >= 40 ? "#d97706" : "#dc2626"}
+              strokeWidth="3"
+              strokeDasharray={`${score.overall} 100`}
+              strokeLinecap="round"
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-300">
+            {Math.round(score.overall)}
+          </span>
         </div>
       </div>
 
-      <div className="grid gap-3 px-6 py-6 sm:grid-cols-2">
-        {Object.entries(score.breakdown).map(([key, value]) => (
-          <div key={key} className="rounded-[22px] border border-white/10 bg-white/5 p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">{LABELS[key] ?? key}</p>
-                <p className="mono mt-2 text-2xl font-semibold text-[color:var(--ink-strong)]">{fmt(value.score, 0)}</p>
-              </div>
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
-                {Math.round(value.weight * 100)}%
-              </span>
+      <div className="mt-5 space-y-2">
+        {Object.entries(score.breakdown).map(([key, val]) => (
+          <div key={key}>
+            <div className="flex justify-between text-xs text-gray-400 mb-0.5">
+              <span>{LABELS[key] ?? key}</span>
+              <span className="mono">{fmt(val.score, 0)}/100</span>
             </div>
-            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
-              <div className="h-full rounded-full bg-[color:var(--accent)]" style={{ width: `${value.score}%` }} />
+            <div className="h-1.5 w-full rounded-full bg-white/[0.06]">
+              <div
+                className="h-1.5 rounded-full bg-blue-500"
+                style={{ width: `${val.score}%` }}
+              />
             </div>
           </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
