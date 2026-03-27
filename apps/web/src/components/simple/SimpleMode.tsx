@@ -30,13 +30,38 @@ interface ChatMessage {
 
 type Phase = "chat" | "parsing" | "followup" | "generating" | "backtesting" | "translating" | "done";
 
-const QUICK_PROMPTS = [
-  { label: "Protect my savings", emoji: "\uD83D\uDEE1\uFE0F", prompt: "I want to protect my savings from a market crash" },
-  { label: "Steady growth", emoji: "\uD83D\uDCC8", prompt: "I want steady growth with moderate risk, US stocks" },
-  { label: "High growth", emoji: "\uD83D\uDE80", prompt: "I want aggressive growth riding momentum in tech stocks" },
-  { label: "Buy the dip", emoji: "\uD83D\uDCB0", prompt: "I want to buy quality stocks when they dip" },
-  { label: "Indian stocks", emoji: "\uD83C\uDDEE\uD83C\uDDF3", prompt: "I have 5 lakhs to invest in Indian stocks, moderate risk" },
-  { label: "Gold safety", emoji: "\u2728", prompt: "I want to park money in gold for safety" },
+const SIMPLE_TEMPLATES = [
+  {
+    category: "Defensive",
+    items: [
+      { label: "Recession Shield", emoji: "🛡️", prompt: "I want to protect $50,000 from a market crash using low-risk US stocks with a medium term horizon" },
+      { label: "Gold Safe Haven", emoji: "✨", prompt: "I want to invest $20,000 in gold ETFs for capital safety, low risk, medium term" },
+      { label: "All Weather", emoji: "☁️", prompt: "I want an all-weather portfolio with $30,000 spread across US stocks and bonds, conservative risk" },
+    ],
+  },
+  {
+    category: "Growth",
+    items: [
+      { label: "Steady Growth", emoji: "📈", prompt: "I want steady growth with moderate risk in US large cap stocks, long term, $30,000 capital" },
+      { label: "Tech Momentum", emoji: "🚀", prompt: "I want aggressive growth riding momentum in US tech stocks like NVDA and AAPL, $25,000, high risk, medium term" },
+      { label: "Dip Buyer", emoji: "💰", prompt: "I want to buy quality US large cap stocks when they dip significantly, $35,000, moderate risk" },
+    ],
+  },
+  {
+    category: "India",
+    items: [
+      { label: "Nifty Momentum", emoji: "🇮🇳", prompt: "I have 5 lakhs to invest in top Nifty50 stocks like RELIANCE and TCS, moderate risk, medium term" },
+      { label: "India Dip Buyer", emoji: "📉", prompt: "I want to buy quality Indian stocks when they dip, conservative risk, 3 lakhs capital, medium term" },
+      { label: "India Banking", emoji: "🏦", prompt: "I want to invest 4 lakhs in Indian banking sector stocks like HDFCBANK and ICICIBANK, moderate risk" },
+    ],
+  },
+  {
+    category: "Income",
+    items: [
+      { label: "Dividend Harvester", emoji: "💵", prompt: "I want dividend income from high-yield US stocks, $40,000 capital, conservative low risk, long term" },
+      { label: "Balanced Compounder", emoji: "⚖️", prompt: "I want balanced long-term compounding growth with $45,000 in US large caps, moderate risk" },
+    ],
+  },
 ];
 
 export function SimpleMode({
@@ -46,6 +71,7 @@ export function SimpleMode({
 }) {
   const nextMessageIdRef = useRef(1);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const followupCountRef = useRef(0);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
@@ -73,7 +99,7 @@ export function SimpleMode({
     setMessages((prev) => prev.map((message) => (message.id === id ? { ...message, ...updates } : message)));
   }
 
-  async function handleSubmit(text?: string) {
+  async function handleSubmit(text?: string, skipFollowup = false) {
     const userText = (text || input).trim();
     if (!userText || phase !== "chat") return;
     setInput("");
@@ -92,7 +118,9 @@ export function SimpleMode({
         loading: false,
       });
 
-      if (intent.needs_followup && intent.followup_questions?.length) {
+      // Allow at most one round of follow-up. Templates skip it entirely.
+      if (!skipFollowup && followupCountRef.current === 0 && intent.needs_followup && intent.followup_questions?.length) {
+        followupCountRef.current += 1;
         addMessage({
           role: "assistant",
           content: intent.followup_questions.join("\n\n"),
@@ -101,6 +129,7 @@ export function SimpleMode({
         return;
       }
 
+      followupCountRef.current = 0;
       await generateAndBacktest(intent);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Something went wrong";
@@ -205,6 +234,7 @@ export function SimpleMode({
       },
     ]);
     nextMessageIdRef.current = 1;
+    followupCountRef.current = 0;
     setPhase("chat");
     setInput("");
   }
@@ -221,20 +251,25 @@ export function SimpleMode({
       </div>
 
       {phase === "chat" && messages.length <= 1 && (
-        <div className="mb-4">
-          <p className="mb-2 text-xs font-medium text-gray-400">Quick start:</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {QUICK_PROMPTS.map((prompt) => (
-              <button
-                key={prompt.label}
-                onClick={() => handleSubmit(prompt.prompt)}
-                className="rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-left text-sm transition-colors hover:border-blue-500/40 hover:bg-white/[0.08]"
-              >
-                <span className="mb-0.5 block text-base">{prompt.emoji}</span>
-                <span className="font-medium text-gray-300">{prompt.label}</span>
-              </button>
-            ))}
-          </div>
+        <div className="mb-4 space-y-3">
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Start with a template</p>
+          {SIMPLE_TEMPLATES.map((group) => (
+            <div key={group.category}>
+              <p className="mb-1.5 text-xs text-gray-500">{group.category}</p>
+              <div className="flex flex-wrap gap-2">
+                {group.items.map((item) => (
+                  <button
+                    key={item.label}
+                    onClick={() => handleSubmit(item.prompt, true)}
+                    className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-blue-500/40 hover:bg-white/[0.08] hover:text-gray-100"
+                  >
+                    <span>{item.emoji}</span>
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
