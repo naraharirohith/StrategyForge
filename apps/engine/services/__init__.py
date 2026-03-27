@@ -19,6 +19,7 @@ from .condition_evaluator import (
     resolve_value,
     estimate_condition_proximity,
 )
+from .market_snapshot import MarketSnapshot
 from .cache import get_cached, set_cached, clear_cache
 
 __all__ = [
@@ -43,6 +44,7 @@ __all__ = [
     "evaluate_single_condition",
     "resolve_value",
     "estimate_condition_proximity",
+    "MarketSnapshot",
     "get_cached",
     "set_cached",
     "clear_cache",
