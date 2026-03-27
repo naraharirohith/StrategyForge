@@ -22,6 +22,7 @@ from .condition_evaluator import (
 )
 from .market_snapshot import MarketSnapshot
 from .cache import get_cached, set_cached, clear_cache
+from .strategy_templates import get_template, get_template_list, customize_template
 
 __all__ = [
     "DataFetcher",
@@ -50,4 +51,7 @@ __all__ = [
     "get_cached",
     "set_cached",
     "clear_cache",
+    "get_template",
+    "get_template_list",
+    "customize_template",
 ]
