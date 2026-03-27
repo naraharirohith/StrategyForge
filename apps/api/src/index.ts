@@ -1,13 +1,11 @@
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
 import { ensureGuestUser } from "./lib/prisma.js";
 import { healthRouter } from "./routes/health.js";
 import { strategiesRouter } from "./routes/strategies.js";
 import { marketplaceRouter } from "./routes/marketplace.js";
 import { errorHandler } from "./middleware/errorHandler.js";
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;

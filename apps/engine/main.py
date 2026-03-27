@@ -25,12 +25,68 @@ from services import (
     IndicatorCalculator,
     run_backtest,
     run_backtest_on_df,
+    run_backtest_multi,
     run_walk_forward,
     ScoreCalculator,
     ConfidenceScorer,
 )
 
 app = FastAPI(title="StrategyForge Engine", version="0.1.0")
+
+
+def _prepare_ticker_dfs(
+    tickers: list[str],
+    timeframe: str,
+    indicators: list[dict],
+    bt_config: dict,
+    force_refresh: bool = False,
+) -> tuple:
+    """
+    Fetch data, compute indicators, and trim warmup for all tickers.
+
+    Returns:
+        Tuple of (ticker_dfs: dict[str, DataFrame], errors: list[str]).
+        ticker_dfs maps ticker -> ready-to-backtest DataFrame.
+    """
+    ticker_dfs = {}
+    errors = []
+
+    max_warmup = 0
+    for ind in indicators:
+        p = ind.get("params", {})
+        max_warmup = max(
+            max_warmup,
+            int(p.get("period", 0)),
+            int(p.get("slow", 0)),
+            int(p.get("k_period", 0)),
+        )
+
+    for ticker in tickers:
+        try:
+            raw = DataFetcher.fetch(
+                ticker, timeframe,
+                start_date=bt_config.get("start_date"),
+                end_date=bt_config.get("end_date"),
+                force_refresh=force_refresh,
+            )
+            if len(raw) < 50:
+                errors.append(f"{ticker}: only {len(raw)} bars fetched")
+                continue
+
+            computed = IndicatorCalculator.compute(raw.copy(), indicators)
+            trimmed = computed.iloc[max_warmup + 5:].ffill().dropna(
+                subset=["Open", "High", "Low", "Close", "Volume"]
+            )
+            if len(trimmed) < 30:
+                errors.append(f"{ticker}: only {len(trimmed)} bars after warmup ({max_warmup} bars)")
+                continue
+
+            ticker_dfs[ticker] = trimmed
+        except Exception as e:
+            errors.append(f"{ticker}: {e}")
+            continue
+
+    return ticker_dfs, errors
 
 
 def sanitize_numpy(obj):
@@ -375,6 +431,7 @@ async def get_confidence(req: ConfidenceRequest):
 async def run_backtest_endpoint(req: BacktestRequest):
     """
     Run a backtest for a given strategy definition.
+    Supports single-ticker and multi-ticker strategies.
     This is the main endpoint called by the Node.js API gateway.
     """
     import pandas as pd
@@ -390,60 +447,38 @@ async def run_backtest_endpoint(req: BacktestRequest):
         initial_capital = bt_config.get("initial_capital", 100000)
         commission = bt_config.get("commission_percent", 0.1) / 100
         slippage = bt_config.get("slippage_percent", 0.05) / 100
+        indicators = strategy.get("indicators", [])
 
         if not tickers:
             raise ValueError("No tickers specified in strategy universe")
 
-        indicators = strategy.get("indicators", [])
-        df = None
-        primary_ticker = None
-        last_error = None
+        ticker_dfs, errors = _prepare_ticker_dfs(
+            tickers, timeframe, indicators, bt_config,
+            force_refresh=req.force_refresh_data,
+        )
 
-        for ticker in tickers:
-            try:
-                raw = DataFetcher.fetch(
-                    ticker, timeframe,
-                    start_date=bt_config.get("start_date"),
-                    end_date=bt_config.get("end_date"),
-                    force_refresh=req.force_refresh_data,
-                )
-                if len(raw) < 50:
-                    last_error = f"{ticker}: only {len(raw)} bars fetched"
-                    continue
-
-                computed = IndicatorCalculator.compute(raw, indicators)
-                max_warmup = 0
-                for ind in indicators:
-                    p = ind.get("params", {})
-                    max_warmup = max(
-                        max_warmup,
-                        int(p.get("period", 0)),
-                        int(p.get("slow", 0)),
-                        int(p.get("k_period", 0)),
-                    )
-
-                trimmed = computed.iloc[max_warmup + 5:].ffill().dropna(
-                    subset=["Open", "High", "Low", "Close", "Volume"]
-                )
-                if len(trimmed) < 30:
-                    last_error = f"{ticker}: only {len(trimmed)} bars after warmup ({max_warmup} bars)"
-                    continue
-
-                df = trimmed
-                primary_ticker = ticker
-                break
-            except Exception as e:
-                last_error = f"{ticker}: {e}"
-                continue
-
-        if df is None or primary_ticker is None:
+        if not ticker_dfs:
+            last_error = errors[-1] if errors else "Unknown error"
             raise ValueError(f"No ticker had sufficient data. Last error: {last_error}")
 
-        bt_result = run_backtest(
-            df=df, strategy=strategy, primary_ticker=primary_ticker,
-            initial_capital=initial_capital, commission=commission,
-            slippage=slippage, indicators=indicators,
-        )
+        # Multi-ticker or single-ticker backtest
+        if len(ticker_dfs) > 1:
+            bt_result = run_backtest_multi(
+                ticker_dfs=ticker_dfs, strategy=strategy,
+                initial_capital=initial_capital, commission=commission,
+                slippage=slippage, indicators=indicators,
+            )
+            # Use the first ticker's df for metrics (benchmark comparison etc.)
+            primary_ticker = list(ticker_dfs.keys())[0]
+            df = ticker_dfs[primary_ticker]
+        else:
+            primary_ticker = list(ticker_dfs.keys())[0]
+            df = ticker_dfs[primary_ticker]
+            bt_result = run_backtest(
+                df=df, strategy=strategy, primary_ticker=primary_ticker,
+                initial_capital=initial_capital, commission=commission,
+                slippage=slippage, indicators=indicators,
+            )
 
         result = _compute_backtest_metrics(
             bt_result=bt_result, df=df, strategy=strategy,
@@ -451,6 +486,15 @@ async def run_backtest_endpoint(req: BacktestRequest):
             equity_curve_data=bt_result["equity_curve"],
             indicators=indicators,
         )
+
+        # Add multi-ticker metadata if applicable
+        if len(ticker_dfs) > 1:
+            result["multi_ticker"] = {
+                "tickers_requested": tickers,
+                "tickers_used": list(ticker_dfs.keys()),
+                "tickers_failed": [e for e in errors],
+                "per_ticker_trades": bt_result.get("per_ticker_trades", {}),
+            }
 
         duration_ms = int((time.time() - start_time) * 1000)
         return BacktestResponse(success=True, result=sanitize_numpy(result), duration_ms=duration_ms)
@@ -464,7 +508,7 @@ async def run_backtest_endpoint(req: BacktestRequest):
 async def run_backtest_stream(req: BacktestRequest):
     """
     Streaming backtest endpoint that emits SSE progress events.
-    Same logic as /backtest but yields real-time stage updates.
+    Supports single-ticker and multi-ticker strategies.
     """
 
     def generate():
@@ -487,76 +531,54 @@ async def run_backtest_stream(req: BacktestRequest):
                 return
 
             # Stage 1: Fetch data
+            ticker_label = f"{len(tickers)} tickers" if len(tickers) > 1 else tickers[0]
             yield format_sse("progress", {
                 "stage": "fetching",
-                "message": f"Fetching {tickers[0]} data...",
+                "message": f"Fetching data for {ticker_label}...",
                 "percent": 10,
             })
 
-            df = None
-            primary_ticker = None
-            last_error = None
+            # Stage 2: Compute indicators
+            yield format_sse("progress", {
+                "stage": "indicators",
+                "message": f"Computing {len(indicators)} indicators...",
+                "percent": 30,
+            })
 
-            for ticker in tickers:
-                try:
-                    raw = DataFetcher.fetch(
-                        ticker, timeframe,
-                        start_date=bt_config.get("start_date"),
-                        end_date=bt_config.get("end_date"),
-                        force_refresh=req.force_refresh_data,
-                    )
-                    if len(raw) < 50:
-                        last_error = f"{ticker}: only {len(raw)} bars fetched"
-                        continue
+            ticker_dfs, errors = _prepare_ticker_dfs(
+                tickers, timeframe, indicators, bt_config,
+                force_refresh=req.force_refresh_data,
+            )
 
-                    # Stage 2: Compute indicators
-                    yield format_sse("progress", {
-                        "stage": "indicators",
-                        "message": f"Computing {len(indicators)} indicators...",
-                        "percent": 30,
-                    })
-
-                    computed = IndicatorCalculator.compute(raw, indicators)
-                    max_warmup = 0
-                    for ind in indicators:
-                        p = ind.get("params", {})
-                        max_warmup = max(
-                            max_warmup,
-                            int(p.get("period", 0)),
-                            int(p.get("slow", 0)),
-                            int(p.get("k_period", 0)),
-                        )
-
-                    trimmed = computed.iloc[max_warmup + 5:].ffill().dropna(
-                        subset=["Open", "High", "Low", "Close", "Volume"]
-                    )
-                    if len(trimmed) < 30:
-                        last_error = f"{ticker}: only {len(trimmed)} bars after warmup ({max_warmup} bars)"
-                        continue
-
-                    df = trimmed
-                    primary_ticker = ticker
-                    break
-                except Exception as e:
-                    last_error = f"{ticker}: {e}"
-                    continue
-
-            if df is None or primary_ticker is None:
+            if not ticker_dfs:
+                last_error = errors[-1] if errors else "Unknown error"
                 yield format_sse("error", {"error": f"No ticker had sufficient data. Last error: {last_error}"})
                 return
 
             # Stage 3: Run backtest
+            total_bars = sum(len(df) for df in ticker_dfs.values())
             yield format_sse("progress", {
                 "stage": "backtesting",
-                "message": f"Running backtest ({len(df)} bars)...",
+                "message": f"Running backtest ({len(ticker_dfs)} tickers, {total_bars} total bars)...",
                 "percent": 50,
             })
 
-            bt_result = run_backtest(
-                df=df, strategy=strategy, primary_ticker=primary_ticker,
-                initial_capital=initial_capital, commission=commission,
-                slippage=slippage, indicators=indicators,
-            )
+            if len(ticker_dfs) > 1:
+                bt_result = run_backtest_multi(
+                    ticker_dfs=ticker_dfs, strategy=strategy,
+                    initial_capital=initial_capital, commission=commission,
+                    slippage=slippage, indicators=indicators,
+                )
+                primary_ticker = list(ticker_dfs.keys())[0]
+                df = ticker_dfs[primary_ticker]
+            else:
+                primary_ticker = list(ticker_dfs.keys())[0]
+                df = ticker_dfs[primary_ticker]
+                bt_result = run_backtest(
+                    df=df, strategy=strategy, primary_ticker=primary_ticker,
+                    initial_capital=initial_capital, commission=commission,
+                    slippage=slippage, indicators=indicators,
+                )
 
             # Stage 4: Compute scoring metrics
             yield format_sse("progress", {
@@ -565,7 +587,7 @@ async def run_backtest_stream(req: BacktestRequest):
                 "percent": 75,
             })
 
-            # Stage 5: Walk-forward (included in _compute_backtest_metrics)
+            # Stage 5: Walk-forward
             yield format_sse("progress", {
                 "stage": "walk_forward",
                 "message": "Running walk-forward validation...",
@@ -578,6 +600,14 @@ async def run_backtest_stream(req: BacktestRequest):
                 equity_curve_data=bt_result["equity_curve"],
                 indicators=indicators,
             )
+
+            if len(ticker_dfs) > 1:
+                result["multi_ticker"] = {
+                    "tickers_requested": tickers,
+                    "tickers_used": list(ticker_dfs.keys()),
+                    "tickers_failed": [e for e in errors],
+                    "per_ticker_trades": bt_result.get("per_ticker_trades", {}),
+                }
 
             duration_ms = int((time.time() - start_time) * 1000)
             result["duration_ms"] = duration_ms
