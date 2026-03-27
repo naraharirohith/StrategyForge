@@ -496,6 +496,30 @@ def get_template_list() -> list[dict[str, str]]:
     return TEMPLATE_INFO
 
 
+# Default India tickers per strategy style (all with .NS suffix)
+_INDIA_DEFAULTS: dict[str, list[str]] = {
+    "recession_shield":    ["HDFCBANK.NS", "TCS.NS", "HINDUNILVR.NS", "NESTLEIND.NS"],
+    "balanced_growth":     ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
+    "momentum_rider":      ["RELIANCE.NS", "TCS.NS", "INFY.NS", "BAJFINANCE.NS", "ADANIENT.NS"],
+    "dividend_harvester":  ["ITC.NS", "COALINDIA.NS", "POWERGRID.NS", "HINDUNILVR.NS"],
+    "dip_buyer":           ["RELIANCE.NS", "HDFCBANK.NS", "TCS.NS", "ICICIBANK.NS"],
+    "gold_safe_haven":     ["GOLDBEES.NS"],
+    "all_weather":         ["NIFTYBEES.NS", "GOLDBEES.NS", "RELIANCE.NS", "HDFCBANK.NS"],
+    "nifty_momentum":      ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS", "ICICIBANK.NS"],
+}
+
+
+def _ensure_ns_suffix(tickers: list[str]) -> list[str]:
+    """Add .NS suffix to tickers that don't already have an exchange suffix."""
+    result = []
+    for t in tickers:
+        if "." not in t:
+            result.append(t + ".NS")
+        else:
+            result.append(t)
+    return result
+
+
 def customize_template(
     template_id: str,
     market: str | None = None,
@@ -514,12 +538,19 @@ def customize_template(
 
     if market:
         customized["universe"]["market"] = market
-        if market == "IN" and currency is None:
-            currency = "INR"
+        if market == "IN":
+            if currency is None:
+                currency = "INR"
+            # Replace tickers with India defaults if none explicitly provided
+            if not tickers:
+                tickers = _INDIA_DEFAULTS.get(template_id, ["RELIANCE.NS", "TCS.NS", "HDFCBANK.NS", "INFY.NS"])
         elif market == "US" and currency is None:
             currency = "USD"
 
     if tickers:
+        # Ensure .NS suffix for Indian market
+        if market == "IN" or customized["universe"].get("market") == "IN":
+            tickers = _ensure_ns_suffix(tickers)
         customized["universe"]["tickers"] = tickers
 
     if capital:
