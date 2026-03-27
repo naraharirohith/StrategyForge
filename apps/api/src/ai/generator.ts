@@ -668,3 +668,28 @@ export function createGenerator(config: {
     return new StrategyGenerator(new OpenAIProvider(config.apiKey, config.model));
   }
 }
+
+/**
+ * Resolve a provider name to an LLMProvider instance using environment API keys.
+ * Useful for lightweight AI calls (intent parsing) that don't need the full StrategyGenerator.
+ */
+export function resolveProvider(providerName: string): LLMProvider {
+  type ProviderName = "claude" | "openai" | "openrouter" | "gemini";
+  const name = (providerName || "gemini") as ProviderName;
+
+  const apiKey =
+    name === "claude"
+      ? process.env.ANTHROPIC_API_KEY
+      : name === "openrouter"
+      ? process.env.OPENROUTER_API_KEY
+      : name === "gemini"
+      ? process.env.GEMINI_API_KEY
+      : process.env.OPENAI_API_KEY;
+
+  if (!apiKey) throw new Error(`${name} API key not configured`);
+
+  if (name === "claude") return new ClaudeProvider(apiKey);
+  if (name === "openrouter") return new OpenRouterProvider(apiKey);
+  if (name === "gemini") return new GeminiProvider(apiKey);
+  return new OpenAIProvider(apiKey);
+}
