@@ -5,6 +5,7 @@ import { ensureGuestUser } from "./lib/prisma.js";
 import { healthRouter } from "./routes/health.js";
 import { strategiesRouter } from "./routes/strategies.js";
 import { marketplaceRouter } from "./routes/marketplace.js";
+import { marketRouter } from "./routes/market.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 
 const app = express();
@@ -20,6 +21,7 @@ app.use(express.json({ limit: "10mb" }));
 app.use("/api", healthRouter);
 app.use("/api", strategiesRouter);
 app.use("/api", marketplaceRouter);
+app.use("/api", marketRouter);
 
 // ============================================================
 // Error handling
