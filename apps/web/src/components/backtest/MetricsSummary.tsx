@@ -1,4 +1,5 @@
 "use client";
+
 import { fmtPct, fmt } from "@/lib/utils";
 
 interface Summary {
@@ -18,62 +19,83 @@ interface Props {
   summary: Summary;
 }
 
-function Metric({ label, value, sub, positive }: { label: string; value: string; sub?: string; positive?: boolean }) {
-  const color =
-    positive === true ? "text-green-600" :
-    positive === false ? "text-red-600" :
-    "text-slate-900";
+function Metric({
+  label,
+  value,
+  sub,
+  positive,
+  featured = false,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  positive?: boolean;
+  featured?: boolean;
+}) {
+  const tone =
+    positive === true
+      ? "text-emerald-200"
+      : positive === false
+        ? "text-rose-200"
+        : "text-[color:var(--ink-strong)]";
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className={`mt-1 text-2xl font-bold mono ${color}`}>{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-slate-400">{sub}</p>}
+    <div className={`metric-card ${featured ? "lg:col-span-2" : ""}`}>
+      <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">{label}</p>
+      <p className={`mono mt-3 text-3xl font-semibold ${tone}`}>{value}</p>
+      {sub && <p className="mt-2 text-sm text-[color:var(--ink-muted)]">{sub}</p>}
     </div>
   );
 }
 
 export function MetricsSummary({ summary }: Props) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <Metric
-        label="Total Return"
-        value={fmtPct(summary.total_return_percent)}
-        positive={summary.total_return_percent > 0}
-      />
-      <Metric
-        label="Sharpe Ratio"
-        value={fmt(summary.sharpe_ratio, 2)}
-        positive={summary.sharpe_ratio > 1}
-      />
-      <Metric
-        label="Max Drawdown"
-        value={fmtPct(summary.max_drawdown_percent)}
-        sub="peak-to-trough"
-        positive={false}
-      />
-      <Metric
-        label="Win Rate"
-        value={`${fmt(summary.win_rate, 1)}%`}
-        positive={summary.win_rate > 50}
-      />
-      <Metric
-        label="Profit Factor"
-        value={fmt(summary.profit_factor, 2)}
-        positive={summary.profit_factor > 1}
-      />
-      <Metric label="Total Trades" value={String(summary.total_trades)} />
-      <Metric label="Avg Hold" value={`${fmt(summary.avg_holding_bars, 0)} bars`} />
-      <Metric
-        label="Best Trade"
-        value={fmtPct(summary.best_trade_percent)}
-        positive={true}
-      />
-      <Metric
-        label="Worst Trade"
-        value={fmtPct(summary.worst_trade_percent)}
-        positive={false}
-      />
-      <Metric label="Annual Vol" value={`${fmt(summary.volatility_annual, 1)}%`} />
-    </div>
+    <section className="space-y-4">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">Performance Digest</p>
+          <h3 className="section-title">What the backtest actually delivered</h3>
+        </div>
+        <p className="max-w-md text-right text-sm leading-6 text-[color:var(--ink-muted)]">
+          These numbers balance edge, efficiency, and damage control so the strategy can be judged with more than a single return figure.
+        </p>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Metric
+          label="Total Return"
+          value={fmtPct(summary.total_return_percent)}
+          positive={summary.total_return_percent > 0}
+          featured
+        />
+        <Metric
+          label="Sharpe Ratio"
+          value={fmt(summary.sharpe_ratio, 2)}
+          positive={summary.sharpe_ratio > 1}
+          featured
+        />
+        <Metric
+          label="Max Drawdown"
+          value={fmtPct(summary.max_drawdown_percent)}
+          sub="Peak to trough loss"
+          positive={false}
+        />
+        <Metric
+          label="Win Rate"
+          value={`${fmt(summary.win_rate, 1)}%`}
+          positive={summary.win_rate > 50}
+        />
+        <Metric
+          label="Profit Factor"
+          value={fmt(summary.profit_factor, 2)}
+          positive={summary.profit_factor > 1}
+        />
+        <Metric label="Total Trades" value={String(summary.total_trades)} />
+        <Metric label="Average Hold" value={`${fmt(summary.avg_holding_bars, 0)} bars`} />
+        <Metric label="Best Trade" value={fmtPct(summary.best_trade_percent)} positive />
+        <Metric label="Worst Trade" value={fmtPct(summary.worst_trade_percent)} positive={false} />
+        <Metric label="Annualized Volatility" value={`${fmt(summary.volatility_annual, 1)}%`} />
+      </div>
+    </section>
   );
 }
