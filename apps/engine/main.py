@@ -29,6 +29,8 @@ from services import (
     run_walk_forward,
     ScoreCalculator,
     ConfidenceScorer,
+    MarketSnapshot,
+    NewsFetcher,
 )
 
 app = FastAPI(title="StrategyForge Engine", version="0.1.0")
@@ -412,6 +414,47 @@ async def health():
         engine_version="0.1.0",
         supported_indicators=IndicatorCalculator.SUPPORTED,
     )
+
+
+@app.get("/market-snapshot")
+async def get_market_snapshot(market: str = "US"):
+    """
+    Get current market snapshot (indices, VIX, sectors, regime, hot tickers).
+    Cached for 6 hours. Used by AI generator for context-aware strategies.
+    """
+    try:
+        snapshot = MarketSnapshot.compute(market)
+        return {"success": True, "snapshot": sanitize_numpy(snapshot)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/market-snapshot/prompt")
+async def get_market_prompt(market: str = "US"):
+    """
+    Get market snapshot formatted as a text block for AI prompt injection.
+    """
+    try:
+        prompt_text = MarketSnapshot.get_prompt_context(market)
+        return {"success": True, "prompt_context": prompt_text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+@app.get("/news")
+async def get_news(market: str = "US", limit: int = 10):
+    """
+    Get recent business headlines for the requested market.
+    Falls back across multiple providers and never raises.
+    """
+    fetcher = NewsFetcher()
+    normalized_market = str(market or "US").upper()
+    headlines = fetcher.fetch_headlines(normalized_market, limit)
+    return {
+        "headlines": headlines,
+        "source": fetcher.last_source,
+        "market": normalized_market,
+    }
 
 
 @app.post("/confidence", response_model=ConfidenceResponse)

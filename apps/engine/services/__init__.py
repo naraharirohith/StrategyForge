@@ -10,6 +10,7 @@ from .data_validator import validate_ohlcv, DataValidationError, get_data_qualit
 from .indicator_calculator import IndicatorCalculator
 from .backtester import run_backtest, run_backtest_on_df, run_backtest_multi
 from .asset_universe import ASSET_UNIVERSE, resolve_tickers
+from .news_fetcher import NewsFetcher
 from .walk_forward import run_walk_forward
 from .score_calculator import ScoreCalculator
 from .confidence_scorer import ConfidenceScorer
@@ -19,6 +20,7 @@ from .condition_evaluator import (
     resolve_value,
     estimate_condition_proximity,
 )
+from .market_snapshot import MarketSnapshot
 from .cache import get_cached, set_cached, clear_cache
 
 __all__ = [
@@ -36,6 +38,7 @@ __all__ = [
     "run_backtest_multi",
     "ASSET_UNIVERSE",
     "resolve_tickers",
+    "NewsFetcher",
     "run_walk_forward",
     "ScoreCalculator",
     "ConfidenceScorer",
@@ -43,6 +46,7 @@ __all__ = [
     "evaluate_single_condition",
     "resolve_value",
     "estimate_condition_proximity",
+    "MarketSnapshot",
     "get_cached",
     "set_cached",
     "clear_cache",
