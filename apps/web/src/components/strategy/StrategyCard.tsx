@@ -44,19 +44,19 @@ interface Props {
 }
 
 const STYLE_COLORS: Record<string, string> = {
-  momentum: "bg-blue-50 text-blue-700 border-blue-200",
-  mean_reversion: "bg-purple-50 text-purple-700 border-purple-200",
-  swing: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  positional: "bg-teal-50 text-teal-700 border-teal-200",
-  intraday: "bg-orange-50 text-orange-700 border-orange-200",
-  portfolio: "bg-green-50 text-green-700 border-green-200",
-  hybrid: "bg-slate-100 text-slate-700 border-slate-200",
+  momentum: "border-cyan-300/40 bg-cyan-500/10 text-cyan-100",
+  mean_reversion: "border-fuchsia-300/40 bg-fuchsia-500/10 text-fuchsia-100",
+  swing: "border-indigo-300/40 bg-indigo-500/10 text-indigo-100",
+  positional: "border-teal-300/40 bg-teal-500/10 text-teal-100",
+  intraday: "border-orange-300/40 bg-orange-500/10 text-orange-100",
+  portfolio: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
+  hybrid: "border-white/10 bg-white/5 text-[color:var(--ink-muted)]",
 };
 
 const RISK_COLORS: Record<string, string> = {
-  conservative: "bg-green-50 text-green-700 border-green-200",
-  moderate: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  aggressive: "bg-red-50 text-red-700 border-red-200",
+  conservative: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
+  moderate: "border-amber-300/40 bg-amber-500/10 text-amber-100",
+  aggressive: "border-rose-300/40 bg-rose-500/10 text-rose-100",
 };
 
 const EXIT_TYPE_LABELS: Record<string, string> = {
@@ -64,108 +64,136 @@ const EXIT_TYPE_LABELS: Record<string, string> = {
   take_profit: "Take Profit",
   trailing_stop: "Trailing Stop",
   time_based: "Time Exit",
-  indicator_based: "Signal Exit",
+  indicator: "Indicator Exit",
+  indicator_based: "Indicator Exit",
   break_even: "Break Even",
 };
 
+function SectionTitle({ label }: { label: string }) {
+  return <p className="mb-3 text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">{label}</p>;
+}
+
 export function StrategyCard({ strategy, onRunBacktest, loading }: Props) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      {/* Header */}
-      <div className="border-b border-slate-100 px-6 py-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold text-slate-900">{strategy.name}</h2>
-            <p className="mt-1 text-sm text-slate-500 leading-relaxed">{strategy.description}</p>
-          </div>
-          <button
-            onClick={onRunBacktest}
-            disabled={loading}
-            className="shrink-0 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? "Running…" : "Run Backtest"}
-          </button>
-        </div>
+    <section className="glass-panel overflow-hidden">
+      <div className="border-b border-white/[0.08] px-6 py-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl">
+            <p className="eyebrow">Generated Strategy</p>
+            <h2 className="mt-3 text-3xl font-semibold text-[color:var(--ink-strong)]">{strategy.name}</h2>
+            <p className="mt-4 text-sm leading-7 text-[color:var(--ink-muted)]">{strategy.description}</p>
 
-        {/* Badges */}
-        <div className="mt-3 flex flex-wrap gap-2">
-          {strategy.style && (
-            <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${STYLE_COLORS[strategy.style] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
-              {strategy.style.replace(/_/g, " ")}
-            </span>
-          )}
-          {strategy.risk_level && (
-            <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${RISK_COLORS[strategy.risk_level] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
-              {strategy.risk_level} risk
-            </span>
-          )}
-          {strategy.timeframe && (
-            <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
-              {strategy.timeframe} chart
-            </span>
-          )}
-          {strategy.universe && (
-            <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
-              {strategy.universe.market} {strategy.universe.asset_class}
-            </span>
-          )}
-          {strategy.universe?.tickers && strategy.universe.tickers.length > 0 && (
-            <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs font-mono text-slate-600">
-              {strategy.universe.tickers.slice(0, 4).join(", ")}
-              {strategy.universe.tickers.length > 4 && ` +${strategy.universe.tickers.length - 4}`}
-            </span>
-          )}
+            <div className="mt-5 flex flex-wrap gap-2">
+              {strategy.style && (
+                <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${STYLE_COLORS[strategy.style] ?? STYLE_COLORS.hybrid}`}>
+                  {strategy.style.replace(/_/g, " ")}
+                </span>
+              )}
+              {strategy.risk_level && (
+                <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${RISK_COLORS[strategy.risk_level] ?? STYLE_COLORS.hybrid}`}>
+                  {strategy.risk_level} risk
+                </span>
+              )}
+              {strategy.timeframe && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  {strategy.timeframe} chart
+                </span>
+              )}
+              {strategy.universe && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+                  {strategy.universe.market} {strategy.universe.asset_class}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full max-w-xs rounded-[26px] border border-white/10 bg-white/5 p-4">
+            <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">Next Step</p>
+            <p className="mt-3 text-sm leading-6 text-[color:var(--ink-muted)]">
+              Run a full backtest to score the system, inspect drawdown behavior, and produce the trade log.
+            </p>
+            <button
+              onClick={onRunBacktest}
+              disabled={loading}
+              className="mt-5 w-full rounded-full bg-[color:var(--accent)] px-4 py-3 text-sm font-semibold text-[color:var(--bg)] transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Running backtest..." : "Run Backtest"}
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 divide-y divide-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-        {/* Indicators */}
-        <div className="px-5 py-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Indicators</p>
-          <div className="flex flex-wrap gap-1.5">
-            {(strategy.indicators ?? []).map((ind) => (
+      <div className="grid gap-4 px-6 py-6 lg:grid-cols-3">
+        <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+          <SectionTitle label="Indicators" />
+          <div className="flex flex-wrap gap-2">
+            {(strategy.indicators ?? []).map((indicator) => (
               <span
-                key={ind.id}
-                className="rounded bg-slate-100 px-2 py-0.5 text-xs font-mono text-slate-700"
-                title={JSON.stringify(ind.params)}
+                key={indicator.id}
+                className="mono rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[color:var(--ink-muted)]"
+                title={JSON.stringify(indicator.params)}
               >
-                {ind.type}
-                {ind.params.period ? `(${ind.params.period})` : ""}
+                {indicator.type}
+                {indicator.params.period ? `(${indicator.params.period})` : ""}
               </span>
             ))}
           </div>
         </div>
 
-        {/* Entry Rules */}
-        <div className="px-5 py-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Entry Rules</p>
-          <div className="space-y-1">
+        <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+          <SectionTitle label="Entry Architecture" />
+          <div className="space-y-2">
             {(strategy.entry_rules ?? []).map((rule) => (
-              <div key={rule.id} className="flex items-center gap-1.5 text-xs">
-                <span className={`rounded px-1.5 py-0.5 font-medium ${rule.side === "long" ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
-                  {rule.side}
-                </span>
-                <span className="text-slate-700">{rule.name}</span>
+              <div key={rule.id} className="rounded-[18px] border border-white/[0.08] bg-[color:var(--bg-strong)]/[0.50] px-3 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={`rounded-full border px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] ${
+                      rule.side === "long"
+                        ? "border-emerald-300/40 bg-emerald-500/10 text-emerald-100"
+                        : "border-rose-300/40 bg-rose-500/10 text-rose-100"
+                    }`}
+                  >
+                    {rule.side}
+                  </span>
+                  <span className="text-sm font-medium text-[color:var(--ink-strong)]">{rule.name}</span>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Exit Rules */}
-        <div className="px-5 py-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Exit Rules</p>
-          <div className="space-y-1">
+        <div className="rounded-[24px] border border-white/10 bg-white/5 p-5">
+          <SectionTitle label="Exit Architecture" />
+          <div className="space-y-2">
             {(strategy.exit_rules ?? []).map((rule) => (
-              <div key={rule.id} className="flex items-center gap-1.5 text-xs">
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">
+              <div key={rule.id} className="rounded-[18px] border border-white/[0.08] bg-[color:var(--bg-strong)]/[0.50] px-3 py-3">
+                <span className="text-sm font-medium text-[color:var(--ink-strong)]">
                   {EXIT_TYPE_LABELS[rule.type] ?? rule.type}
-                  {rule.value != null ? ` ${rule.value}%` : ""}
                 </span>
+                {rule.value != null && (
+                  <span className="ml-2 text-sm text-[color:var(--ink-muted)]">{rule.value}%</span>
+                )}
               </div>
             ))}
           </div>
         </div>
       </div>
-    </div>
+
+      {strategy.universe?.tickers && strategy.universe.tickers.length > 0 && (
+        <div className="border-t border-white/[0.08] px-6 py-5">
+          <SectionTitle label="Universe Preview" />
+          <div className="flex flex-wrap gap-2">
+            {strategy.universe.tickers.map((ticker) => (
+              <span
+                key={ticker}
+                className="mono rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-[color:var(--ink-muted)]"
+              >
+                {ticker}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
