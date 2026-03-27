@@ -1,13 +1,7 @@
 "use client";
-
 import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  AreaChart, Area, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, CartesianGrid,
 } from "recharts";
 import { fmtDate } from "@/lib/utils";
 
@@ -17,59 +11,40 @@ interface Props {
 
 export function DrawdownChart({ drawdownCurve }: Props) {
   const data = drawdownCurve
-    .filter((_, index) => index % Math.max(1, Math.floor(drawdownCurve.length / 300)) === 0)
+    .filter((_, i) => i % Math.max(1, Math.floor(drawdownCurve.length / 300)) === 0)
     .map(([date, value]) => ({ date: date.split(" ")[0], value }));
 
   return (
-    <section className="glass-panel p-5 sm:p-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="eyebrow">Risk Path</p>
-          <h3 className="mt-2 text-2xl font-semibold text-[color:var(--ink-strong)]">Drawdown curve</h3>
-        </div>
-        <p className="text-sm text-[color:var(--ink-muted)]">Peak-to-trough pain over time</p>
-      </div>
-
-      <ResponsiveContainer width="100%" height={220}>
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
+      <h3 className="mb-4 text-sm font-semibold text-gray-300">Drawdown</h3>
+      <ResponsiveContainer width="100%" height={180}>
         <AreaChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 11, fill: "#908878" }}
-            tickFormatter={(value: string | number) => String(value).slice(0, 7)}
+            tick={{ fontSize: 11, fill: "#6b7280" }}
+            tickFormatter={(v: any) => String(v).slice(0, 7)}
             interval="preserveStartEnd"
-            axisLine={false}
-            tickLine={false}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: "#908878" }}
-            tickFormatter={(value: number) => `${Number(value).toFixed(0)}%`}
-            width={48}
-            axisLine={false}
-            tickLine={false}
+            tick={{ fontSize: 11, fill: "#6b7280" }}
+            tickFormatter={(v: any) => `${Number(v).toFixed(0)}%`}
+            width={45}
           />
           <Tooltip
-            contentStyle={{
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: "rgba(16,20,27,0.96)",
-              color: "#f7f2e8",
-            }}
-            formatter={(value) => {
-              const numeric = Array.isArray(value) ? Number(value[0] ?? 0) : Number(value ?? 0);
-              return [`${numeric.toFixed(2)}%`, "Drawdown"];
-            }}
-            labelFormatter={(label) => fmtDate(String(label ?? ""))}
+            formatter={(v: any) => [`${Number(v).toFixed(2)}%`, "Drawdown"]}
+            labelFormatter={(l: any) => fmtDate(l)}
+            contentStyle={{ backgroundColor: "#1a1a24", border: "1px solid #2a2a3a" }}
           />
           <Area
             type="monotone"
             dataKey="value"
-            stroke="#d1794a"
-            fill="rgba(209,121,74,0.24)"
-            strokeWidth={1.8}
+            stroke="#dc2626"
+            fill="rgba(239,68,68,0.1)"
+            strokeWidth={1.5}
           />
         </AreaChart>
       </ResponsiveContainer>
-    </section>
+    </div>
   );
 }

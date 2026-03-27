@@ -7,30 +7,33 @@ interface Props {
 const MONTH_LABELS = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
 function getCellColor(value: number): string {
-  if (value <= -10) return "#8a3838";
+  // Interpolate between anchor points for smooth gradients
+  if (value <= -10) return "#dc2626";
   if (value <= -3) {
-    const t = (value + 10) / 7;
-    return lerpColor("#8a3838", "#d1794a", t);
+    const t = (value + 10) / 7; // 0 at -10, 1 at -3
+    return lerpColor("#dc2626", "#fca5a5", t);
   }
   if (value < 0) {
-    const t = (value + 3) / 3;
-    return lerpColor("#d1794a", "#2b2a2f", t);
+    const t = (value + 3) / 3; // 0 at -3, 1 at 0
+    return lerpColor("#fca5a5", "#fef2f2", t);
   }
-  if (value === 0) return "#20252f";
+  if (value === 0) return "#f9fafb";
   if (value <= 3) {
-    const t = value / 3;
-    return lerpColor("#1f3f42", "#4b9ea8", t);
+    const t = value / 3; // 0 at 0, 1 at 3
+    return lerpColor("#f0fdf4", "#86efac", t);
   }
   if (value <= 10) {
-    const t = (value - 3) / 7;
-    return lerpColor("#4b9ea8", "#88d1bc", t);
+    const t = (value - 3) / 7; // 0 at 3, 1 at 10
+    return lerpColor("#86efac", "#16a34a", t);
   }
-  return "#88d1bc";
+  return "#16a34a";
 }
 
 function getTextColor(value: number): string {
-  if (value <= -6 || value >= 6) return "#fbf7ef";
-  return "#e6dece";
+  // White text on deep colors, dark text on pale colors
+  if (value <= -10 || value >= 10) return "#ffffff";
+  if (value <= -6 || value >= 6) return "#ffffff";
+  return "#e5e7eb";
 }
 
 function lerpColor(a: string, b: string, t: number): string {
@@ -54,119 +57,131 @@ function formatReturn(value: number): string {
 export function MonthlyReturns({ monthlyReturns }: Props) {
   if (!monthlyReturns || monthlyReturns.length === 0) return null;
 
+  // Group by year
   const byYear: Record<number, Record<number, number>> = {};
   for (const entry of monthlyReturns) {
     const [yearStr, monthStr] = entry.month.split("-");
     const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10);
+    const month = parseInt(monthStr, 10); // 1-indexed
     if (!byYear[year]) byYear[year] = {};
     byYear[year][month] = entry.return_percent;
   }
 
   const years = Object.keys(byYear).map(Number).sort();
+
+  // Compute yearly totals
   const yearlyTotals: Record<number, number> = {};
   for (const year of years) {
-    yearlyTotals[year] = Object.values(byYear[year]).reduce((sum, value) => sum + value, 0);
+    yearlyTotals[year] = Object.values(byYear[year]).reduce((s, v) => s + v, 0);
   }
 
+  // Compute monthly averages across all years
   const monthlyAverages: Record<number, number> = {};
-  for (let month = 1; month <= 12; month++) {
-    const values = years.map((year) => byYear[year][month]).filter((value) => value !== undefined);
-    monthlyAverages[month] = values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  for (let m = 1; m <= 12; m++) {
+    const values = years.map((y) => byYear[y][m]).filter((v) => v !== undefined);
+    monthlyAverages[m] = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : 0;
   }
-  const averageTotal = Object.values(monthlyAverages).reduce((sum, value) => sum + value, 0);
+  const avgTotal = Object.values(monthlyAverages).reduce((s, v) => s + v, 0);
 
   return (
-    <section className="glass-panel p-5 sm:p-6">
-      <div className="mb-5">
-        <p className="eyebrow">Seasonality</p>
-        <h3 className="mt-2 text-2xl font-semibold text-[color:var(--ink-strong)]">Monthly returns matrix</h3>
-        <p className="mt-2 text-sm text-[color:var(--ink-muted)]">Calendar month behavior by year, plus average seasonality.</p>
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-100">Monthly Returns</h3>
+        <p className="text-xs text-gray-500">Returns by calendar month</p>
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[720px] w-full border-collapse">
+        <table className="w-full border-collapse min-w-[640px]">
           <thead>
             <tr>
-              <th className="px-2 py-2 text-left text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Year</th>
-              {MONTH_LABELS.map((label, index) => (
-                <th key={index} className="px-1 py-2 text-center text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
+              <th className="px-2 py-1.5 text-left text-xs font-medium text-gray-400 w-14">Year</th>
+              {MONTH_LABELS.map((label, i) => (
+                <th key={i} className="px-1 py-1.5 text-center text-xs font-medium text-gray-400 w-14">
                   {label}
                 </th>
               ))}
-              <th className="px-1 py-2 text-center text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Year</th>
+              <th className="px-1 py-1.5 text-center text-xs font-semibold text-gray-300 w-16">Year</th>
             </tr>
           </thead>
           <tbody>
             {years.map((year) => (
               <tr key={year}>
-                <td className="px-2 py-1.5 text-sm font-medium text-[color:var(--ink-muted)]">{year}</td>
-                {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => {
+                <td className="px-2 py-1 text-xs font-medium text-gray-400">{year}</td>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
                   const value = byYear[year][month];
                   const hasData = value !== undefined;
                   return (
-                    <td key={month} className="px-1 py-1">
+                    <td key={month} className="px-0.5 py-0.5">
                       <div
-                        className="flex items-center justify-center rounded-[14px] px-1 py-2"
+                        className="flex items-center justify-center rounded px-1 py-1.5"
                         style={
                           hasData
                             ? { backgroundColor: getCellColor(value), color: getTextColor(value) }
-                            : { backgroundColor: "#1a1e25", color: "#6f6b63" }
+                            : { backgroundColor: "rgba(255,255,255,0.05)", color: "#6b7280" }
                         }
                       >
-                        <span className="mono text-xs">{hasData ? formatReturn(value) : "-"}</span>
+                        <span className="font-mono text-xs leading-none">
+                          {hasData ? formatReturn(value) : "\u2014"}
+                        </span>
                       </div>
                     </td>
                   );
                 })}
-                <td className="px-1 py-1">
+                <td className="px-0.5 py-0.5">
                   <div
-                    className="flex items-center justify-center rounded-[14px] px-1 py-2 font-semibold"
+                    className="flex items-center justify-center rounded px-1 py-1.5 font-semibold"
                     style={{
                       backgroundColor: getCellColor(yearlyTotals[year]),
                       color: getTextColor(yearlyTotals[year]),
                     }}
                   >
-                    <span className="mono text-xs">{formatReturn(yearlyTotals[year])}</span>
+                    <span className="font-mono text-xs leading-none">
+                      {formatReturn(yearlyTotals[year])}
+                    </span>
                   </div>
                 </td>
               </tr>
             ))}
-            <tr className="border-t border-white/[0.08]">
-              <td className="px-2 py-2 text-sm font-medium italic text-[color:var(--ink-soft)]">Avg</td>
-              {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => {
+            {/* Average row */}
+            <tr className="border-t border-white/[0.06]">
+              <td className="px-2 py-1 text-xs font-medium text-gray-400 italic">Avg</td>
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => {
                 const value = monthlyAverages[month];
-                const hasValues = years.some((year) => byYear[year][month] !== undefined);
+                const hasValues = years.some((y) => byYear[y][month] !== undefined);
                 return (
-                  <td key={month} className="px-1 py-1">
+                  <td key={month} className="px-0.5 py-0.5">
                     <div
-                      className="flex items-center justify-center rounded-[14px] px-1 py-2"
+                      className="flex items-center justify-center rounded px-1 py-1.5"
                       style={
                         hasValues
                           ? { backgroundColor: getCellColor(value), color: getTextColor(value) }
-                          : { backgroundColor: "#1a1e25", color: "#6f6b63" }
+                          : { backgroundColor: "rgba(255,255,255,0.05)", color: "#6b7280" }
                       }
                     >
-                      <span className="mono text-xs">{hasValues ? formatReturn(value) : "-"}</span>
+                      <span className="font-mono text-xs leading-none">
+                        {hasValues ? formatReturn(value) : "\u2014"}
+                      </span>
                     </div>
                   </td>
                 );
               })}
-              <td className="px-1 py-1">
+              <td className="px-0.5 py-0.5">
                 <div
-                  className="flex items-center justify-center rounded-[14px] px-1 py-2 font-semibold"
+                  className="flex items-center justify-center rounded px-1 py-1.5 font-semibold"
                   style={{
-                    backgroundColor: getCellColor(averageTotal),
-                    color: getTextColor(averageTotal),
+                    backgroundColor: getCellColor(avgTotal),
+                    color: getTextColor(avgTotal),
                   }}
                 >
-                  <span className="mono text-xs">{formatReturn(averageTotal)}</span>
+                  <span className="font-mono text-xs leading-none">
+                    {formatReturn(avgTotal)}
+                  </span>
                 </div>
               </td>
             </tr>
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
   );
 }
