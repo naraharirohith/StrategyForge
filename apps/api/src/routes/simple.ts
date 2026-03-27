@@ -81,10 +81,10 @@ simpleRouter.post("/simple/generate", async (req, res) => {
             data: {
               userId: guestUserId,
               name: strategy.name,
-              description: strategy.description,
-              market: strategy.universe?.market || "US",
-              style: strategy.style || "hybrid",
-              riskLevel: strategy.risk_level || "moderate",
+              description: strategy.description ?? "",
+              market: (["US", "IN"].includes(strategy.universe?.market) ? strategy.universe.market : "US") as "US" | "IN",
+              style: clampStyle(strategy.style),
+              riskLevel: clampRisk(strategy.risk_level),
               timeframe: strategy.timeframe || "1d",
               definition: strategy,
             },
@@ -133,12 +133,12 @@ simpleRouter.post("/simple/generate", async (req, res) => {
       data: {
         userId: guestUserId,
         name: strategy.name,
-        description: strategy.description,
-        market: strategy.universe?.market || "US",
-        style: strategy.style || "hybrid",
-        riskLevel: strategy.risk_level || "moderate",
+        description: strategy.description ?? "",
+        market: (["US", "IN"].includes(strategy.universe?.market) ? strategy.universe.market : "US") as "US" | "IN",
+        style: clampStyle(strategy.style),
+        riskLevel: clampRisk(strategy.risk_level),
         timeframe: strategy.timeframe || "1d",
-        definition: strategy as any,
+        definition: strategy as object,
       },
     });
 
@@ -207,6 +207,22 @@ simpleRouter.get("/simple/templates", async (_req, res) => {
 // ============================================================
 // Helpers
 // ============================================================
+
+const VALID_STYLES = ["momentum", "mean_reversion", "swing", "positional", "intraday", "portfolio", "hybrid"] as const;
+const VALID_RISKS = ["conservative", "moderate", "aggressive"] as const;
+type DbStyle = (typeof VALID_STYLES)[number];
+type DbRisk = (typeof VALID_RISKS)[number];
+
+function clampStyle(raw: unknown): DbStyle {
+  return VALID_STYLES.includes(raw as DbStyle) ? (raw as DbStyle) : "hybrid";
+}
+
+function clampRisk(raw: unknown): DbRisk {
+  // Also map "low"→"conservative", "high"→"aggressive" in case AI returns those
+  if (raw === "low") return "conservative";
+  if (raw === "high") return "aggressive";
+  return VALID_RISKS.includes(raw as DbRisk) ? (raw as DbRisk) : "moderate";
+}
 
 function buildDescriptionFromIntent(intent: ParsedIntent): string {
   const parts: string[] = [];
