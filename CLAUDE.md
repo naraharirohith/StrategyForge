@@ -44,19 +44,25 @@ cd apps/engine && source venv/bin/activate && python -m pytest tests/ -v
 - `apps/api/src/index.ts` — Express app setup, mounts routers
 - `apps/api/src/routes/strategies.ts` — Generate, backtest, confidence, list, detail endpoints
 - `apps/api/src/routes/marketplace.ts` — Browse published strategies
+- `apps/api/src/routes/market.ts` — Market snapshot proxy endpoints
 - `apps/api/src/routes/health.ts` — Health check
 - `apps/api/src/lib/prisma.ts` — Shared Prisma client + guest user
 - `apps/api/src/middleware/errorHandler.ts` — Global error handler
-- `apps/api/src/ai/generator.ts` — AI strategy generation (Claude, OpenAI, Gemini, OpenRouter)
+- `apps/api/src/ai/generator.ts` — AI strategy generation with market context injection (Claude, OpenAI, Gemini, OpenRouter)
 
 ### Backtesting Engine
 - `apps/engine/main.py` — FastAPI app + routes (imports from services/)
-- `apps/engine/services/data_fetcher.py` — yfinance OHLCV wrapper
+- `apps/engine/services/data_fetcher.py` — Multi-source OHLCV fetcher (yfinance → Twelve Data → Alpha Vantage)
+- `apps/engine/services/data_sources.py` — Data source abstraction (YFinanceSource, TwelveDataSource, AlphaVantageSource)
+- `apps/engine/services/data_validator.py` — OHLCV data quality validation
 - `apps/engine/services/indicator_calculator.py` — 23 technical indicators
-- `apps/engine/services/backtester.py` — Event-driven backtest loop
+- `apps/engine/services/backtester.py` — Event-driven backtest loop (single + multi-ticker)
 - `apps/engine/services/score_calculator.py` — Composite 0-100 StrategyScore
 - `apps/engine/services/confidence_scorer.py` — Live confidence (regime, signal, volatility)
 - `apps/engine/services/condition_evaluator.py` — Condition evaluation + proximity estimation
+- `apps/engine/services/market_snapshot.py` — Market state: indices, VIX, sectors, regime, hot tickers
+- `apps/engine/services/news_fetcher.py` — Financial news headlines (NewsAPI, GNews, Google RSS)
+- `apps/engine/services/asset_universe.py` — Category-to-ticker mapping (US/IN sectors, themes, commodities)
 
 ### Frontend
 - `apps/web/src/app/page.tsx` — Strategy generator (home page)
