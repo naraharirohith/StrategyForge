@@ -1,5 +1,32 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
 
+export interface ParsedIntent {
+  capital?: number;
+  currency?: "USD" | "INR";
+  market?: "US" | "IN";
+  risk_tolerance?: "low" | "moderate" | "high";
+  goal?: string;
+  concerns?: string[];
+  time_horizon?: "short" | "medium" | "long";
+  preferred_sectors?: string[];
+  preferred_tickers?: string[];
+  needs_followup: boolean;
+  followup_questions?: string[];
+  suggested_template?: string;
+  is_expert_input: boolean;
+  expert_description?: string;
+  plain_summary: string;
+}
+
+export interface TranslatedResult {
+  headline: string;
+  verdict: "great" | "good" | "okay" | "poor";
+  bullets: string[];
+  risk_warning: string;
+  comparison: string;
+  suggestion: string;
+}
+
 function buildBacktestWindow(strategy: Record<string, unknown>) {
   const timeframe = String(strategy.timeframe ?? "1d");
   const endDate = new Date();
@@ -45,6 +72,50 @@ export async function generateStrategy(
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
   return data;
+}
+
+export async function parseIntent(input: string, provider: string = "gemini"): Promise<ParsedIntent> {
+  const res = await fetch(`${API_URL}/api/simple/parse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ input, provider }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !data.intent) throw new Error(data.error || "Intent parsing failed");
+  return data.intent as ParsedIntent;
+}
+
+export async function simpleGenerate(intent: ParsedIntent, provider: string = "gemini") {
+  const res = await fetch(`${API_URL}/api/simple/generate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ intent, provider }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) throw new Error(data.error || "Simple generation failed");
+  return data as {
+    success: boolean;
+    strategy: Record<string, unknown>;
+    strategyId?: string;
+    source?: string;
+    template_id?: string;
+  };
+}
+
+export async function translateResult(
+  summary: Record<string, unknown>,
+  score: Record<string, unknown>,
+  currency: string = "USD",
+  timeframe: string = "1d",
+): Promise<TranslatedResult> {
+  const res = await fetch(`${API_URL}/api/simple/translate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ summary, score, currency, timeframe }),
+  });
+  const data = await res.json();
+  if (!res.ok || data.error || !data.translation) throw new Error(data.error || "Translation failed");
+  return data.translation as TranslatedResult;
 }
 
 export async function runBacktest(

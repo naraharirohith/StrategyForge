@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BarChart3, Compass, Gauge, Trash2 } from "lucide-react";
 import { getStrategies, deleteStrategy } from "@/lib/api";
 import { fmtDate, gradeColor, fmt } from "@/lib/utils";
 import { CardSkeleton } from "@/components/Skeleton";
@@ -8,20 +10,47 @@ import { CardSkeleton } from "@/components/Skeleton";
 type AnyObj = Record<string, unknown>;
 
 const STYLE_COLORS: Record<string, string> = {
-  momentum: "bg-blue-50 text-blue-700 border-blue-200",
-  mean_reversion: "bg-purple-50 text-purple-700 border-purple-200",
-  swing: "bg-indigo-50 text-indigo-700 border-indigo-200",
-  positional: "bg-teal-50 text-teal-700 border-teal-200",
-  intraday: "bg-orange-50 text-orange-700 border-orange-200",
-  portfolio: "bg-green-50 text-green-700 border-green-200",
-  hybrid: "bg-slate-100 text-slate-700 border-slate-200",
+  momentum: "border-cyan-300/40 bg-cyan-500/10 text-cyan-100",
+  mean_reversion: "border-fuchsia-300/40 bg-fuchsia-500/10 text-fuchsia-100",
+  swing: "border-indigo-300/40 bg-indigo-500/10 text-indigo-100",
+  positional: "border-teal-300/40 bg-teal-500/10 text-teal-100",
+  intraday: "border-orange-300/40 bg-orange-500/10 text-orange-100",
+  portfolio: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
+  hybrid: "border-white/10 bg-white/[0.06] text-[color:var(--ink-muted)]",
 };
 
 const RISK_COLORS: Record<string, string> = {
-  conservative: "bg-green-50 text-green-700 border-green-200",
-  moderate: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  aggressive: "bg-red-50 text-red-700 border-red-200",
+  conservative: "border-emerald-300/40 bg-emerald-500/10 text-emerald-100",
+  moderate: "border-amber-300/40 bg-amber-500/10 text-amber-100",
+  aggressive: "border-rose-300/40 bg-rose-500/10 text-rose-100",
 };
+
+function DashboardStat({
+  label,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  icon: typeof BarChart3;
+}) {
+  return (
+    <div className="soft-panel p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">{label}</p>
+          <p className="mt-3 text-3xl font-semibold text-[color:var(--ink-strong)]">{value}</p>
+          <p className="mt-2 text-sm text-[color:var(--ink-muted)]">{detail}</p>
+        </div>
+        <div className="rounded-full border border-white/10 bg-white/[0.06] p-3 text-[color:var(--accent)]">
+          <Icon className="h-5 w-5" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
   const [strategies, setStrategies] = useState<AnyObj[]>([]);
@@ -40,6 +69,7 @@ export default function DashboardPage() {
         setLoading(false);
       }
     }
+
     load();
   }, []);
 
@@ -48,7 +78,7 @@ export default function DashboardPage() {
     setDeleting(id);
     try {
       await deleteStrategy(id);
-      setStrategies((prev) => prev.filter((s) => (s.id as string) !== id));
+      setStrategies((prev) => prev.filter((strategy) => (strategy.id as string) !== id));
     } catch (e) {
       alert(e instanceof Error ? e.message : "Failed to delete strategy");
     } finally {
@@ -56,139 +86,189 @@ export default function DashboardPage() {
     }
   }
 
+  const scoredStrategies = strategies.filter((strategy) => typeof strategy.score === "number");
+  const averageScore =
+    scoredStrategies.length > 0
+      ? scoredStrategies.reduce((sum, strategy) => sum + (strategy.score as number), 0) / scoredStrategies.length
+      : null;
+  const profitableCount = strategies.filter(
+    (strategy) => typeof strategy.totalReturn === "number" && (strategy.totalReturn as number) > 0,
+  ).length;
+  const markets = new Set(strategies.map((strategy) => String(strategy.market ?? "")).filter(Boolean));
+
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
-        {/* Header */}
-        <div className="mb-8 flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-slate-900">My Strategies</h1>
-          {!loading && strategies.length > 0 && (
-            <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-              {strategies.length}
-            </span>
-          )}
+    <div className="page-shell">
+      <section className="grid gap-6 lg:grid-cols-[1.25fr,0.75fr]">
+        <div className="glass-panel p-7 sm:p-8">
+          <p className="eyebrow">Strategy Archive</p>
+          <h1 className="display-title mt-3 max-w-3xl text-4xl sm:text-5xl">
+            Your lab of saved systems, scores, and conviction calls.
+          </h1>
+          <p className="mt-5 max-w-2xl text-base leading-7 text-[color:var(--ink-muted)]">
+            Review what is working, retire weak ideas, and compare the strongest strategies before you spend more time iterating on them.
+          </p>
+
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Link href="/" className="nav-pill">
+              Launch generator
+            </Link>
+            <Link href="/compare" className="stat-chip">
+              Compare best ideas
+            </Link>
+          </div>
         </div>
 
-        {/* Loading */}
-        {loading && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <CardSkeleton key={i} />
-            ))}
-          </div>
-        )}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <DashboardStat
+            label="Saved Systems"
+            value={loading ? "..." : String(strategies.length)}
+            detail="Total strategies preserved in your research archive."
+            icon={Compass}
+          />
+          <DashboardStat
+            label="Average Score"
+            value={loading ? "..." : averageScore != null ? fmt(averageScore, 0) : "-"}
+            detail="Across strategies that already completed scoring."
+            icon={Gauge}
+          />
+          <DashboardStat
+            label="Profitable Runs"
+            value={loading ? "..." : String(profitableCount)}
+            detail={`${markets.size || 0} markets represented in the current archive.`}
+            icon={BarChart3}
+          />
+        </div>
+      </section>
 
-        {/* Error */}
-        {error && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
+      {loading && (
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <CardSkeleton key={index} />
+          ))}
+        </section>
+      )}
 
-        {/* Empty state */}
-        {!loading && !error && strategies.length === 0 && (
-          <div className="rounded-xl border border-slate-200 bg-white px-6 py-16 text-center shadow-sm">
-            <p className="text-lg font-medium text-slate-700">No strategies yet.</p>
-            <p className="mt-2 text-sm text-slate-500">
-              <a href="/" className="text-blue-600 hover:text-blue-700 font-medium">
-                Generate your first strategy &rarr;
-              </a>
+      {error && (
+        <section className="rounded-[28px] border border-rose-300/30 bg-rose-500/10 px-5 py-4 text-sm text-rose-100">
+          {error}
+        </section>
+      )}
+
+      {!loading && !error && strategies.length === 0 && (
+        <section className="glass-panel px-6 py-16 text-center">
+          <p className="eyebrow">Empty Lab</p>
+          <h2 className="mt-3 text-3xl font-semibold text-[color:var(--ink-strong)]">No saved strategies yet.</h2>
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-[color:var(--ink-muted)]">
+            Start with a guided prompt or a quick template, then save the strongest ideas here once they have been generated and tested.
+          </p>
+          <Link href="/" className="nav-pill mt-8 inline-flex">
+            Generate your first strategy
+          </Link>
+        </section>
+      )}
+
+      {!loading && strategies.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="eyebrow">Saved Strategies</p>
+              <h2 className="section-title">Every idea, ranked and ready to review</h2>
+            </div>
+            <p className="max-w-md text-right text-sm leading-6 text-[color:var(--ink-muted)]">
+              Open a detail page for the full research stack or remove outdated systems to keep the archive sharp.
             </p>
           </div>
-        )}
 
-        {/* Strategy grid */}
-        {!loading && strategies.length > 0 && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {strategies.map((s) => {
-              const style = (s.style as string) ?? "";
-              const risk = (s.riskLevel as string) ?? "";
-              const market = (s.market as string) ?? "";
-              const score = s.score as number | null;
-              const grade = s.grade as string | null;
-              const totalReturn = s.totalReturn as number | null;
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {strategies.map((strategy) => {
+              const id = strategy.id as string;
+              const style = (strategy.style as string) ?? "";
+              const risk = (strategy.riskLevel as string) ?? "";
+              const market = (strategy.market as string) ?? "";
+              const score = strategy.score as number | null;
+              const grade = strategy.grade as string | null;
+              const totalReturn = strategy.totalReturn as number | null;
 
               return (
-                <div
-                  key={s.id as string}
-                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm hover:border-blue-200 hover:shadow-md transition-all"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-base font-semibold text-slate-900 truncate">
-                        {s.name as string}
+                <article key={id} className="glass-panel flex h-full flex-col p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="truncate text-xl font-semibold text-[color:var(--ink-strong)]">
+                        {strategy.name as string}
                       </h3>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
+                      <div className="mt-4 flex flex-wrap gap-2">
                         {market && (
-                          <span className="inline-flex items-center rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                          <span className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-1 text-[11px] uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">
                             {market}
                           </span>
                         )}
                         {style && (
-                          <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${STYLE_COLORS[style] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                          <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${STYLE_COLORS[style] ?? STYLE_COLORS.hybrid}`}>
                             {style.replace(/_/g, " ")}
                           </span>
                         )}
                         {risk && (
-                          <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-medium ${RISK_COLORS[risk] ?? "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                          <span className={`rounded-full border px-3 py-1 text-[11px] uppercase tracking-[0.22em] ${RISK_COLORS[risk] ?? "border-white/10 bg-white/[0.06] text-[color:var(--ink-soft)]"}`}>
                             {risk} risk
                           </span>
                         )}
                       </div>
                     </div>
-                    <div className="text-right shrink-0">
+
+                    <div className="rounded-[22px] border border-white/10 bg-white/5 px-4 py-3 text-right">
                       {score != null ? (
-                        <div>
-                          <p className="text-3xl font-bold text-slate-900">{fmt(score, 0)}</p>
+                        <>
+                          <p className="mono text-3xl font-semibold text-[color:var(--ink-strong)]">{fmt(score, 0)}</p>
                           {grade && (
-                            <span className={`inline-flex items-center rounded border px-2 py-0.5 text-xs font-bold ${gradeColor(grade)}`}>
+                            <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${gradeColor(grade)}`}>
                               Grade {grade}
                             </span>
                           )}
-                        </div>
+                        </>
                       ) : (
-                        <p className="text-sm text-slate-400">Not scored</p>
+                        <p className="text-sm text-[color:var(--ink-soft)]">Not scored</p>
                       )}
                     </div>
                   </div>
 
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 text-xs text-slate-500">
-                      {totalReturn != null ? (
-                        <span className={totalReturn >= 0 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
-                          {totalReturn >= 0 ? "+" : ""}{fmt(totalReturn, 2)}%
-                        </span>
-                      ) : (
-                        <span>&mdash;</span>
-                      )}
-                      <span>{fmtDate(s.createdAt as string)}</span>
+                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Total Return</p>
+                      <p className={`mono mt-2 text-2xl font-semibold ${totalReturn != null && totalReturn >= 0 ? "text-emerald-200" : "text-rose-200"}`}>
+                        {totalReturn != null ? `${totalReturn >= 0 ? "+" : ""}${fmt(totalReturn, 2)}%` : "-"}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => handleDelete(s.id as string)}
-                        disabled={deleting === (s.id as string)}
-                        className="text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-50"
-                      >
-                        {deleting === (s.id as string) ? "Deleting..." : "Delete"}
-                      </button>
-                      <a
-                        href={`/strategy/${s.id as string}`}
-                        className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                      >
-                        View Details &rarr;
-                      </a>
+                    <div className="rounded-[20px] border border-white/10 bg-white/5 p-4">
+                      <p className="text-xs uppercase tracking-[0.22em] text-[color:var(--ink-soft)]">Created</p>
+                      <p className="mt-2 text-base font-medium text-[color:var(--ink-strong)]">
+                        {fmtDate(strategy.createdAt as string)}
+                      </p>
                     </div>
                   </div>
-                </div>
+
+                  <div className="mt-6 flex items-center justify-between gap-3">
+                    <button
+                      onClick={() => handleDelete(id)}
+                      disabled={deleting === id}
+                      className="inline-flex items-center gap-2 rounded-full border border-rose-300/25 bg-rose-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-rose-100 transition hover:bg-rose-500/18 disabled:opacity-50"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      {deleting === id ? "Deleting" : "Delete"}
+                    </button>
+                    <Link href={`/strategy/${id}`} className="nav-pill">
+                      View research
+                    </Link>
+                  </div>
+                </article>
               );
             })}
           </div>
-        )}
+        </section>
+      )}
 
-        <p className="mt-8 text-center text-xs text-slate-400">
-          For educational purposes only. Not investment advice.
-        </p>
-      </div>
+      <p className="pb-2 text-center text-xs uppercase tracking-[0.24em] text-[color:var(--ink-soft)]">
+        Educational use only. Not investment advice.
+      </p>
     </div>
   );
 }
