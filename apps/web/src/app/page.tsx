@@ -53,6 +53,7 @@ export default function Home() {
   const [provider,    setProvider]    = useState<string>("gemini");
   const [step,        setStep]        = useState<Step>("idle");
   const [error,       setError]       = useState<string | null>(null);
+  const [redirect,    setRedirect]    = useState<{ message: string; suggestion: string } | null>(null);
   const [strategy,    setStrategy]    = useState<AnyObj | null>(null);
   const [strategyId,  setStrategyId]  = useState<string | null>(null);
   const [backtest,    setBacktest]    = useState<AnyObj | null>(null);
@@ -72,12 +73,18 @@ export default function Home() {
     if (!prompt.trim()) return;
     setStep("generating");
     setError(null);
+    setRedirect(null);
     setStrategy(null);
     setStrategyId(null);
     setBacktest(null);
     setConfidence(null);
     try {
       const data = await generateStrategy(prompt.trim(), undefined, provider);
+      if (data.unsupported) {
+        setRedirect({ message: data.message, suggestion: data.suggestion });
+        setStep("idle");
+        return;
+      }
       setStrategy(data.strategy ?? data);
       setStrategyId(data.strategyId ?? null);
       setStep("generated");
@@ -262,6 +269,17 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {/* Unsupported instrument redirect */}
+            {redirect && (
+              <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
+                <p className="font-semibold text-amber-400 mb-1">Not supported yet</p>
+                <p className="text-amber-300/80 mb-3">{redirect.message}</p>
+                <p className="text-amber-300/60 text-xs">
+                  <span className="font-medium text-amber-400">Try instead:</span> {redirect.suggestion}
+                </p>
+              </div>
+            )}
 
             {/* Error */}
             {error && (

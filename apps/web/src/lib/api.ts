@@ -71,6 +71,7 @@ export async function generateStrategy(
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
+  // Pass through unsupported-instrument redirects for the caller to handle
   return data;
 }
 
