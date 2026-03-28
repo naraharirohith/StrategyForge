@@ -217,7 +217,7 @@ STRATEGY_TEMPLATES: dict[str, dict[str, Any]] = {
     "dip_buyer": {
         "schema_version": "1.0.0",
         "name": "Dip Buyer",
-        "description": "A mean-reversion strategy that buys quality large-cap stocks on significant dips. Enters when RSI signals oversold conditions while the broader trend remains intact. Conservative stops with moderate profit targets.",
+        "description": "A mean-reversion strategy that buys quality large-cap stocks on significant dips within a long-term uptrend. Enters when RSI signals oversold conditions while the 200-day trend remains intact. Conservative stops with moderate profit targets.",
         "style": "mean_reversion",
         "risk_level": "moderate",
         "universe": {
@@ -228,7 +228,7 @@ STRATEGY_TEMPLATES: dict[str, dict[str, Any]] = {
         "timeframe": "1d",
         "indicators": [
             {"id": "rsi_14", "type": "RSI", "params": {"period": 14}},
-            {"id": "ema_50", "type": "EMA", "params": {"period": 50}},
+            {"id": "ema_200", "type": "EMA", "params": {"period": 200}},
             {"id": "bbands", "type": "BBANDS", "params": {"period": 20, "std_dev": 2}},
         ],
         "entry_rules": [
@@ -239,8 +239,8 @@ STRATEGY_TEMPLATES: dict[str, dict[str, Any]] = {
                 "conditions": {
                     "logic": "AND",
                     "conditions": [
-                        {"id": "c1", "left": {"type": "indicator", "indicator_id": "rsi_14"}, "operator": "lt", "right": {"type": "constant", "value": 30}},
-                        {"id": "c2", "left": {"type": "price", "field": "close"}, "operator": "gt", "right": {"type": "indicator", "indicator_id": "ema_50"}},
+                        {"id": "c1", "left": {"type": "indicator", "indicator_id": "rsi_14"}, "operator": "lt", "right": {"type": "constant", "value": 35}},
+                        {"id": "c2", "left": {"type": "price", "field": "close"}, "operator": "gt", "right": {"type": "indicator", "indicator_id": "ema_200"}},
                     ],
                 },
                 "position_sizing": {"method": "percent_of_portfolio", "percent": 15},

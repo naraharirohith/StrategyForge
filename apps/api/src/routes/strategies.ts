@@ -181,6 +181,57 @@ function applyBacktestPreflight(strategy: StrategyLike) {
   }
 }
 
+// ============================================================
+// Unsupported instrument detection
+// ============================================================
+
+const OPTIONS_PATTERNS: RegExp[] = [
+  /\boptions?\b/i,
+  /\bfutures?\b/i,
+  /\bf&o\b/i,
+  /\bfno\b/i,
+  /\bderivatives?\b/i,
+  /\bstrike\s+price\b/i,
+  /\bexpiry\b/i,
+  /\bcall\s+option\b/i,
+  /\bput\s+option\b/i,
+  /\b(nifty|banknifty|bank\s*nifty|sensex)\s+(ce|pe)\b/i,
+  /\b(ce|pe)\s+(option|contract)\b/i,
+  /\btheta\b|\bvega\b/i,
+  /\boptions?\s+chain\b/i,
+  /\blot\s+size\b/i,
+];
+
+const INDIA_PATTERNS: RegExp[] = [
+  /\bnifty\b|\bbanknifty\b|\bbank\s*nifty\b|\bnse\b|\bbse\b/i,
+  /\bindia\b|\bindian\b|\brupee\b|\binr\b/i,
+  /\.ns\b/i,
+];
+
+function detectUnsupportedInstruments(description: string): {
+  unsupported: true;
+  unsupported_type: string;
+  message: string;
+  suggestion: string;
+} | null {
+  const isOptions = OPTIONS_PATTERNS.some((re) => re.test(description));
+  if (!isOptions) return null;
+
+  const isIndia = INDIA_PATTERNS.some((re) => re.test(description));
+
+  const suggestion = isIndia
+    ? "I can build a directional momentum strategy on top Nifty50 stocks like RELIANCE.NS, TCS.NS, and HDFCBANK.NS instead — these follow the same market direction and can be backtested properly."
+    : "I can build a directional equity or leveraged ETF strategy instead — these give similar directional exposure and work with the backtesting engine.";
+
+  return {
+    unsupported: true,
+    unsupported_type: "options_futures",
+    message:
+      "Options, futures, and F&O contracts aren't supported yet. The engine backtests equities and ETFs only — options require historical options chain data and a pricing model (Black-Scholes, Greeks) that hasn't been built yet.",
+    suggestion,
+  };
+}
+
 export const strategiesRouter = Router();
 
 // ============================================================
@@ -260,6 +311,12 @@ strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) 
 
     if (!description?.trim()) {
       return res.status(400).json({ error: "Description is required" });
+    }
+
+    // Check for unsupported instruments before hitting the AI
+    const unsupportedCheck = detectUnsupportedInstruments(description);
+    if (unsupportedCheck) {
+      return res.status(200).json({ success: false, ...unsupportedCheck });
     }
 
     // Import the generator dynamically
