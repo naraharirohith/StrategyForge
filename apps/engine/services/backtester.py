@@ -191,6 +191,7 @@ def _run_backtest_core(
     # Read risk management limits from strategy
     risk_mgmt = strategy.get("risk_management", {})
     max_drawdown_pct = risk_mgmt.get("max_portfolio_drawdown_percent", 100)
+    max_positions = risk_mgmt.get("max_position_count", 1)
 
     entry_rules = strategy.get("entry_rules", [])
     exit_rules = sorted(strategy.get("exit_rules", []), key=lambda r: r.get("priority", 99))
@@ -259,7 +260,7 @@ def _run_backtest_core(
                 if entry_triggered:
                     position = _open_position(
                         rule, capital, current_price, current_date, i, slippage, commission,
-                        df=df, bar_idx=i,
+                        df=df, bar_idx=i, max_positions=max_positions,
                     )
                     cooldown_tracker[primary_ticker] = i
                     break
@@ -424,7 +425,7 @@ def _run_backtest_multi_core(
                     position = _open_position(
                         rule, alloc_capital, current_price,
                         current_date_str, bar_idx, slippage, commission,
-                        df=df, bar_idx=bar_idx,
+                        df=df, bar_idx=bar_idx, max_positions=max_positions,
                     )
                     position["last_unrealized"] = 0
                     positions[ticker] = position
@@ -537,6 +538,7 @@ def _open_position(
     commission: float,
     df=None,
     bar_idx: int | None = None,
+    max_positions: int = 1,
 ) -> dict:
     """Create a new position dict from an entry rule."""
     side = rule.get("side", "long")
@@ -547,6 +549,8 @@ def _open_position(
         alloc = available_capital * (sizing.get("percent", 10) / 100)
     elif sizing["method"] == "fixed_amount":
         alloc = min(sizing.get("amount", 10000), available_capital * 0.95)
+    elif sizing["method"] == "equal_weight":
+        alloc = available_capital / max(1, max_positions)
     elif sizing["method"] == "percent_risk":
         risk_percent = sizing.get("percent", sizing.get("risk_percent", 1)) / 100
         multiplier = sizing.get("atr_multiplier", 1)

@@ -589,3 +589,44 @@ def test_single_ticker_drawdown_halt():
     trades = result["trades"]
     assert len(trades) < 10, f"Expected drawdown halt to stop trading early, got {len(trades)} trades"
     assert len(trades) >= 1, "Expected at least one trade before halt"
+
+
+def test_equal_weight_position_sizing():
+    """
+    equal_weight with max_position_count=4 should allocate capital/4 per position,
+    not the 10% fallback.
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    import pandas as pd
+    import numpy as np
+    from services.backtester import _open_position
+
+    np.random.seed(1)
+    n = 50
+    dates = pd.date_range("2022-01-01", periods=n, freq="B")
+    close = np.full(n, 100.0)
+    df = pd.DataFrame({
+        "Open": close, "High": close * 1.01, "Low": close * 0.99,
+        "Close": close, "Volume": 1_000_000.0,
+    }, index=dates)
+
+    rule = {
+        "id": "e1", "side": "long",
+        "position_sizing": {"method": "equal_weight"},
+    }
+    capital = 100_000.0
+    max_positions = 4
+
+    pos = _open_position(
+        rule=rule, available_capital=capital, current_price=100.0,
+        current_date="2022-01-03", entry_idx=2,
+        slippage=0.0, commission=0.0,
+        df=df, bar_idx=2, max_positions=max_positions,
+    )
+
+    expected_alloc = capital / max_positions  # 25_000
+    actual_alloc = pos["size"] * pos["entry_price"]
+    assert abs(actual_alloc - expected_alloc) < 1.0, (
+        f"equal_weight should allocate {expected_alloc:.0f} but got {actual_alloc:.0f}"
+    )
