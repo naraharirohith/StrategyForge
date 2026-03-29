@@ -448,3 +448,12 @@ def test_zero_trade_result_has_warning():
     assert "zero_trades_warning" in result, "Expected zero_trades_warning key in result"
     assert result["walk_forward"] is None, "Expected walk_forward to be None for 0-trade result"
     assert result["summary"]["total_trades"] == 0
+
+    EXPECTED_TOP_LEVEL_KEYS = {
+        "strategy_id", "run_id", "run_timestamp", "summary", "score",
+        "equity_curve", "drawdown_curve", "trades", "monthly_returns",
+        "regime_performance", "walk_forward", "zero_trades_warning",
+    }
+    assert EXPECTED_TOP_LEVEL_KEYS.issubset(result.keys()), (
+        f"Missing keys: {EXPECTED_TOP_LEVEL_KEYS - result.keys()}"
+    )
