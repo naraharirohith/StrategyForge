@@ -1,4 +1,4 @@
-# StrategyForge v2 — Master Build Plan
+Sim# StrategyForge v2 — Master Build Plan
 
 > Last updated: 2026-03-27
 > Status: Planning phase — pre-build
