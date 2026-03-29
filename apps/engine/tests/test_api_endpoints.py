@@ -401,3 +401,50 @@ class TestConfidenceEndpoint:
         response = client.post("/confidence", json={"strategy": CLAUDE_MD_STRATEGY})
         # FastAPI validation: missing 'latest_backtest' → 422
         assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# _compute_backtest_metrics — zero-trade early return
+# ---------------------------------------------------------------------------
+
+
+def test_zero_trade_result_has_warning():
+    """
+    When backtest produces 0 trades, result must include a zero_trades_warning
+    and must NOT include walk_forward results (expensive + meaningless).
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    import pandas as pd
+    import numpy as np
+
+    from main import _compute_backtest_metrics
+
+    np.random.seed(42)
+    n = 100
+    dates = pd.date_range("2022-01-01", periods=n, freq="B")
+    close = 100.0 * np.exp(np.cumsum(np.random.normal(0.0005, 0.01, n)))
+    df = pd.DataFrame({
+        "Open": close, "High": close * 1.005, "Low": close * 0.995,
+        "Close": close, "Volume": 1_000_000.0,
+    }, index=dates)
+
+    equity_curve = [[str(d), 100_000.0] for d in dates]
+    bt_result = {"trades": [], "equity_curve": equity_curve, "capital": 100_000.0}
+
+    strategy = {
+        "universe": {"market": "US"},
+        "timeframe": "1d",
+        "backtest_config": {"initial_capital": 100_000, "currency": "USD"},
+        "indicators": [],
+    }
+
+    result = _compute_backtest_metrics(
+        bt_result=bt_result, df=df, strategy=strategy,
+        initial_capital=100_000, equity_curve_data=equity_curve,
+        indicators=[],
+    )
+
+    assert "zero_trades_warning" in result, "Expected zero_trades_warning key in result"
+    assert result["walk_forward"] is None, "Expected walk_forward to be None for 0-trade result"
+    assert result["summary"]["total_trades"] == 0

@@ -135,6 +135,55 @@ def _compute_backtest_metrics(
     capital = bt_result["capital"]
     universe = strategy.get("universe", {})
 
+    # --- Early return for zero-trade results ---
+    if not trades:
+        total_return = ((capital - initial_capital) / initial_capital) * 100
+        summary = {
+            "total_return_percent": 0.0,
+            "annualized_return_percent": 0.0,
+            "sharpe_ratio": 0.0,
+            "sortino_ratio": 0.0,
+            "max_drawdown_percent": 0.0,
+            "max_drawdown_duration_days": 0,
+            "total_trades": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "win_rate": 0.0,
+            "profit_factor": 0.0,
+            "avg_win_percent": 0.0,
+            "avg_loss_percent": 0.0,
+            "avg_holding_bars": 0.0,
+            "best_trade_percent": 0.0,
+            "worst_trade_percent": 0.0,
+            "calmar_ratio": 0.0,
+            "volatility_annual": 0.0,
+            "benchmark_return_percent": round(
+                ((float(df.iloc[-1]["Close"]) / float(df.iloc[0]["Close"])) - 1) * 100, 2
+            ),
+            "alpha": 0.0,
+            "beta": 0.0,
+        }
+        import pandas as pd
+        score = ScoreCalculator.compute(summary)
+        return {
+            "strategy_id": strategy.get("id", "temp"),
+            "run_id": f"bt_{int(time.time())}",
+            "run_timestamp": pd.Timestamp.now().isoformat(),
+            "summary": summary,
+            "score": score,
+            "equity_curve": equity_curve,
+            "drawdown_curve": [],
+            "trades": [],
+            "monthly_returns": [],
+            "regime_performance": [],
+            "walk_forward": None,
+            "zero_trades_warning": (
+                "No trades fired — entry conditions never triggered on the available data. "
+                "Try relaxing entry thresholds, extending the backtest period, or switching to a daily timeframe."
+            ),
+        }
+    # --- End early return ---
+
     # Summary metrics
     total_return = ((capital - initial_capital) / initial_capital) * 100
     winning = [t for t in trades if t["pnl"] > 0]
