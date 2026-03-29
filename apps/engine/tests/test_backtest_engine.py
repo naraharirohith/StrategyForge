@@ -528,3 +528,64 @@ class TestStopLossRequired:
             r.get("type") == "stop_loss" for r in golden_cross_strategy["exit_rules"]
         )
         assert has_stop_loss
+
+
+def test_single_ticker_drawdown_halt():
+    """
+    Single-ticker backtest must stop entering trades once max_portfolio_drawdown_percent is breached.
+    Strategy: always-true entry, tight drawdown limit of 1% so it halts immediately.
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    import pandas as pd
+    import numpy as np
+    from services.backtester import run_backtest
+
+    # Declining price series — any long position loses money
+    # Use small noise so RSI varies (avoids RSI=0 on purely monotonic series)
+    np.random.seed(0)
+    n = 200
+    dates = pd.date_range("2022-01-01", periods=n, freq="B")
+    returns = np.random.randn(n) * 0.005 - 0.003  # noisy downtrend
+    close = 100.0 * np.exp(np.cumsum(returns))  # steady decline with variation
+    df = pd.DataFrame({
+        "Open": close, "High": close * 1.001,
+        "Low": close * 0.999, "Close": close, "Volume": 1_000_000.0,
+    }, index=dates)
+
+    from services.indicator_calculator import IndicatorCalculator
+    indicators = [{"id": "rsi_14", "type": "RSI", "params": {"period": 14}}]
+    df = IndicatorCalculator.compute(df, indicators).iloc[20:]
+
+    strategy = {
+        "schema_version": "1.0.0", "name": "T", "description": "T",
+        "style": "momentum", "risk_level": "moderate",
+        "universe": {"market": "US", "asset_class": "equity", "tickers": ["T"]},
+        "timeframe": "1d", "indicators": indicators,
+        "entry_rules": [{
+            "id": "e1", "name": "Always Enter", "side": "long",
+            "conditions": {"logic": "AND", "conditions": [
+                {"id": "c1", "left": {"type": "indicator", "indicator_id": "rsi_14"},
+                 "operator": "gt", "right": {"type": "constant", "value": 0}},
+            ]},
+            "position_sizing": {"method": "percent_of_portfolio", "percent": 50},
+        }],
+        "exit_rules": [
+            {"id": "x1", "name": "SL", "type": "stop_loss", "value": 50, "priority": 1},
+        ],
+        # 1% max drawdown — should halt very early
+        "risk_management": {"max_portfolio_drawdown_percent": 1, "max_position_count": 1},
+        "backtest_config": {
+            "initial_capital": 100_000, "currency": "USD",
+            "commission_percent": 0.0, "slippage_percent": 0.0,
+        },
+    }
+
+    result = run_backtest(
+        df=df, strategy=strategy, primary_ticker="T",
+        initial_capital=100_000, commission=0.0, slippage=0.0,
+        indicators=indicators,
+    )
+    trades = result["trades"]
+    assert len(trades) < 10, f"Expected drawdown halt to stop trading early, got {len(trades)} trades"
+    assert len(trades) >= 1, "Expected at least one trade before halt"
