@@ -420,10 +420,17 @@ def _run_backtest_multi_core(
                 )
 
                 if entry_triggered:
-                    # Scale allocation by number of allowed positions
-                    alloc_capital = capital / max(1, max_positions - len(positions))
+                    # For equal_weight, _open_position divides capital by max_positions
+                    # internally — pass full remaining capital so it isn't divided twice.
+                    # For percent_of_portfolio / fixed_amount, pre-scale to a fair share
+                    # of remaining slots so one signal can't consume the full portfolio.
+                    sizing_method = rule.get("position_sizing", {}).get("method", "percent_of_portfolio")
+                    if sizing_method == "equal_weight":
+                        cap_for_position = capital
+                    else:
+                        cap_for_position = capital / max(1, max_positions - len(positions))
                     position = _open_position(
-                        rule, alloc_capital, current_price,
+                        rule, cap_for_position, current_price,
                         current_date_str, bar_idx, slippage, commission,
                         df=df, bar_idx=bar_idx, max_positions=max_positions,
                     )
