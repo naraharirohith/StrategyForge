@@ -630,3 +630,84 @@ def test_equal_weight_position_sizing():
     assert abs(actual_alloc - expected_alloc) < 1.0, (
         f"equal_weight should allocate {expected_alloc:.0f} but got {actual_alloc:.0f}"
     )
+
+
+def test_equal_weight_multi_ticker_allocation():
+    """
+    Regression test for the double-division bug in _run_backtest_multi_core.
+
+    With equal_weight and max_position_count=4, each trade's entry value must be
+    approximately capital/4 = 25_000.  Before the fix, the multi-ticker path
+    pre-divided capital by (max_positions - open_positions) before passing it to
+    _open_position, which divided again by max_positions, yielding capital/16 ≈ 6_250.
+    """
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    import pandas as pd
+    import numpy as np
+    from services.backtester import run_backtest_multi
+
+    # Build 4 flat-price synthetic DataFrames, each 120 bars.
+    # Use an "always_on" indicator column so the entry fires on bar 1.
+    n = 120
+    dates = pd.date_range("2022-01-01", periods=n, freq="B")
+
+    tickers = ["AAA", "BBB", "CCC", "DDD"]
+    ticker_dfs = {}
+    for t in tickers:
+        close = np.full(n, 100.0)
+        df = pd.DataFrame({
+            "Open": close, "High": close * 1.001,
+            "Low": close * 0.999, "Close": close, "Volume": 1_000_000.0,
+        }, index=dates)
+        df["always_on"] = 1.0
+        ticker_dfs[t] = df
+
+    strategy = {
+        "schema_version": "1.0.0", "name": "EqW Multi", "description": "Test",
+        "style": "momentum", "risk_level": "moderate",
+        "universe": {"market": "US", "asset_class": "equity", "tickers": tickers},
+        "timeframe": "1d",
+        "indicators": [],
+        "entry_rules": [{
+            "id": "e1", "name": "Always Enter", "side": "long",
+            "conditions": {"logic": "AND", "conditions": [
+                {"id": "c1",
+                 "left": {"type": "indicator", "indicator_id": "always_on"},
+                 "operator": "gt",
+                 "right": {"type": "constant", "value": 0}},
+            ]},
+            "position_sizing": {"method": "equal_weight"},
+        }],
+        "exit_rules": [
+            {"id": "x1", "name": "SL", "type": "stop_loss", "value": 50, "priority": 1},
+        ],
+        "risk_management": {"max_portfolio_drawdown_percent": 100, "max_position_count": 4},
+        "backtest_config": {
+            "initial_capital": 100_000, "currency": "USD",
+            "commission_percent": 0.0, "slippage_percent": 0.0,
+        },
+    }
+
+    initial_capital = 100_000.0
+    result = run_backtest_multi(
+        ticker_dfs=ticker_dfs,
+        strategy=strategy,
+        initial_capital=initial_capital,
+        commission=0.0,
+        slippage=0.0,
+        indicators=[],
+    )
+
+    trades = result["trades"]
+    assert len(trades) >= 1, "Expected at least one trade"
+
+    expected_alloc = initial_capital / 4  # 25_000
+
+    # Check every trade's entry value — should be ≈ capital/4, not capital/16
+    for trade in trades:
+        trade_value = trade["entry_price"] * trade["position_size"]
+        assert abs(trade_value - expected_alloc) < 500, (
+            f"equal_weight multi-ticker: expected ~{expected_alloc:.0f} per trade, "
+            f"got {trade_value:.0f} for ticker {trade['ticker']}"
+        )
