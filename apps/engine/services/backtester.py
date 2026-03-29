@@ -186,6 +186,11 @@ def _run_backtest_core(
     trades = []
     equity_curve = []
     peak_equity = initial_capital
+    drawdown_halt = False
+
+    # Read risk management limits from strategy
+    risk_mgmt = strategy.get("risk_management", {})
+    max_drawdown_pct = risk_mgmt.get("max_portfolio_drawdown_percent", 100)
 
     entry_rules = strategy.get("entry_rules", [])
     exit_rules = sorted(strategy.get("exit_rules", []), key=lambda r: r.get("priority", 99))
@@ -208,20 +213,35 @@ def _run_backtest_core(
         equity_curve.append([current_date, round(current_equity, 2)])
         peak_equity = max(peak_equity, current_equity)
 
+        # Check portfolio drawdown halt
+        if peak_equity > 0:
+            current_dd = ((current_equity - peak_equity) / peak_equity) * 100
+            if current_dd <= -max_drawdown_pct:
+                drawdown_halt = True
+
         # --- Check exits first ---
         if position:
             exit_triggered, exit_reason = _check_exits(
                 position, exit_rules, current_price, i, df=df, indicators=indicators
             )
 
+            # Force close if drawdown halted
+            if drawdown_halt and not exit_triggered:
+                exit_triggered = True
+                exit_reason = "max_drawdown"
+
             if exit_triggered:
                 trade, pnl = _close_position(
                     position, primary_ticker, current_price, current_date,
-                    i, slippage, commission
+                    i, slippage, commission, exit_reason=exit_reason
                 )
                 trades.append(trade)
                 capital += pnl
                 position = None
+
+        # Skip entries if drawdown halted
+        if drawdown_halt:
+            continue
 
         # --- Check entries ---
         if position is None and entry_rules:
