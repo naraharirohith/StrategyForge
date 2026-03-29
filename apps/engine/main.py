@@ -137,7 +137,6 @@ def _compute_backtest_metrics(
 
     # --- Early return for zero-trade results ---
     if not trades:
-        total_return = ((capital - initial_capital) / initial_capital) * 100
         summary = {
             "total_return_percent": 0.0,
             "annualized_return_percent": 0.0,
@@ -157,13 +156,16 @@ def _compute_backtest_metrics(
             "worst_trade_percent": 0.0,
             "calmar_ratio": 0.0,
             "volatility_annual": 0.0,
-            "benchmark_return_percent": round(
-                ((float(df.iloc[-1]["Close"]) / float(df.iloc[0]["Close"])) - 1) * 100, 2
+            "benchmark_return_percent": (
+                round(
+                    ((float(df.iloc[-1]["Close"]) / float(df.iloc[0]["Close"])) - 1) * 100, 2
+                )
+                if df is not None and len(df) >= 2
+                else 0.0
             ),
             "alpha": 0.0,
             "beta": 0.0,
         }
-        import pandas as pd
         score = ScoreCalculator.compute(summary)
         return {
             "strategy_id": strategy.get("id", "temp"),
