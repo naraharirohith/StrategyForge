@@ -237,6 +237,17 @@ export default function Home() {
       setProgressMsg(null);
       setStep("backtested");
 
+      // Non-blocking — fetch plain English explanation
+      if (result.summary && strategy) {
+        explainBacktest(
+          result.summary as Record<string, number>,
+          strategy as Record<string, unknown>,
+          (strategy as AnyObj)?.backtest_config !== undefined
+            ? ((strategy as AnyObj).backtest_config as AnyObj)?.initial_capital as number ?? 100000
+            : 100000
+        ).then(setExplanation).catch(() => null);
+      }
+
       // Auto-run confidence scoring after backtest
       setStep("scoring");
       try {

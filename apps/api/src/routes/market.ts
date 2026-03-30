@@ -32,6 +32,24 @@ marketRouter.get("/market-snapshot", async (req, res) => {
 });
 
 /**
+ * GET /api/market/screener?market=US&sector=technology&limit=6
+ * Proxy to Python engine's /screener endpoint.
+ * Returns top performing stocks in a sector with price, 1-month return, and trend.
+ */
+marketRouter.get("/market/screener", async (req, res) => {
+  const { market = "US", sector = "technology", limit = "6" } = req.query as Record<string, string>;
+  try {
+    const response = await fetch(
+      `${ENGINE_URL}/screener?market=${market}&sector=${sector}&limit=${limit}`
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (e) {
+    res.json({ success: false, stocks: [], error: String(e) });
+  }
+});
+
+/**
  * GET /api/market-snapshot/prompt?market=US
  * Returns market snapshot formatted as text for AI prompt injection.
  */
