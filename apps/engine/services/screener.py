@@ -43,7 +43,7 @@ SECTOR_TICKERS: dict[str, dict[str, list[str]]] = {
         "layer1": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "ADA-USD", "DOT-USD"],
         "defi": ["UNI-USD", "AAVE-USD", "MKR-USD", "CRV-USD", "COMP-USD", "SNX-USD"],
         "layer2": ["MATIC-USD", "ARB-USD", "OP-USD", "LRC-USD"],
-        "exchange": ["BNB-USD", "OKB-USD", "CRO-USD", "FTT-USD"],
+        "exchange": ["BNB-USD", "OKB-USD", "CRO-USD"],
         "gaming": ["AXS-USD", "SAND-USD", "MANA-USD", "ENJ-USD", "GALA-USD"],
     },
 }
@@ -78,8 +78,8 @@ def screen_sector(market: str, sector: str, limit: int = 10) -> list[dict]:
         except Exception:
             continue
 
-    # Rank by 1-month return descending
-    results.sort(key=lambda x: x.get("return_1m", -999), reverse=True)
+    # Rank by 1-month return descending (None values sort last)
+    results.sort(key=lambda x: x.get("return_1m") if x.get("return_1m") is not None else -999, reverse=True)
 
     _screener_cache[cache_key] = {"data": results, "timestamp": time.time()}
     return results[:limit]
@@ -87,7 +87,7 @@ def screen_sector(market: str, sector: str, limit: int = 10) -> list[dict]:
 
 def _fetch_stock_metrics(ticker: str, market: str) -> dict | None:
     """Fetch metrics for a single ticker via yfinance."""
-    currency = "INR" if market == "IN" else ("USD" if market != "CRYPTO" else "USD")
+    currency = "INR" if market == "IN" else "USD"
 
     tk = yf.Ticker(ticker)
     # Fetch 1 year of daily data for returns + MA calculation
@@ -131,8 +131,8 @@ def _fetch_stock_metrics(ticker: str, market: str) -> dict | None:
         "return_1m": round(ret_1m, 2) if ret_1m is not None else None,
         "return_3m": round(ret_3m, 2) if ret_3m is not None else None,
         "above_ema20": current_price > ema20,
-        "above_ema50": current_price > ema50 if ema50 else None,
-        "above_ema200": current_price > ema200 if ema200 else None,
+        "above_ema50": current_price > ema50 if ema50 is not None else None,
+        "above_ema200": current_price > ema200 if ema200 is not None else None,
         "pct_from_52w_high": round(pct_from_52w_high, 1),
         "pe_ratio": pe_ratio,
         "trend": trend,
