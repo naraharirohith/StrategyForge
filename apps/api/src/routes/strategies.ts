@@ -243,7 +243,7 @@ function detectVaguePrompt(
   const words = description.trim().split(/\s+/).filter(Boolean);
 
   // Specific enough signals — skip clarification
-  const TICKER_RE = /\b[A-Z]{1,5}(-USD)?\b|\b[A-Z]+\.NS\b/;
+  const TICKER_RE = /\b[A-Z]{2,5}(-USD)?\b|\b[A-Z]+\.NS\b/;
   const INDICATOR_RE = /\b(EMA|SMA|RSI|MACD|VWAP|ATR|BB|stoch|ADX|supertrend|bollinger|moving average|momentum|breakout|reversal|golden cross|death cross)\b/i;
   const SECTOR_RE = /\b(technology|tech|healthcare|financials|finance|banking|bank|energy|consumer|industrial|utilities|realty|real estate|IT|pharma|auto|fmcg|metals|layer1|layer2|defi|gaming|crypto)\b/i;
   const STRATEGY_STYLE_RE = /\b(momentum|mean reversion|swing|trend following|breakout|value|growth|dividend|short|long|hedge)\b/i;
