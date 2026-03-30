@@ -319,6 +319,12 @@ strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) 
       return res.status(200).json({ success: false, ...unsupportedCheck });
     }
 
+    // Detect market from description if not provided in preferences
+    // so market context fetch uses the right market (IN vs US)
+    const INDIA_MARKET_RE = /\b(nifty|sensex|nse|bse|india[n]?|inr|rupee|\.ns\b|reliance|tcs|infosys|hdfc|zerodha)\b/i;
+    const detectedMarket: "US" | "IN" = INDIA_MARKET_RE.test(description) ? "IN" : "US";
+    const mergedPreferences = { ...preferences, market: preferences?.market ?? detectedMarket };
+
     // Import the generator dynamically
     const { createGenerator } = await import("../ai/generator.js");
 
@@ -339,7 +345,7 @@ strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) 
 
     let strategy;
     try {
-      strategy = await generator.generate({ description, preferences });
+      strategy = await generator.generate({ description, preferences: mergedPreferences });
     } catch (genErr: unknown) {
       const msg = genErr instanceof Error ? genErr.message : String(genErr);
       console.error("Raw generation error:", msg.substring(0, 1000));

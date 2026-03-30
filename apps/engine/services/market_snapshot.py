@@ -152,7 +152,7 @@ class MarketSnapshot:
 
         # Fear/Greed
         fg = snap["fear_greed"]
-        lines.append(f"VIX: {fg.get('vix', 'N/A')} ({fg.get('level', 'unknown')} fear)")
+        lines.append(f"VIX: {fg.get('vix', 'N/A')} ({fg.get('level', 'unknown').replace('_', ' ')})")
 
         # Sectors
         sectors = snap["sectors"]
