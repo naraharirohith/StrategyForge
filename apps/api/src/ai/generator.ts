@@ -189,6 +189,32 @@ Price vs indicator: Close > SMA(200) → left: {type:price, field:close}, operat
 
 const ENGINE_URL = process.env.ENGINE_URL || "http://localhost:8001";
 
+// ============================================================
+// Sector Keyword Map — for screener context injection
+// ============================================================
+
+const SECTOR_KEYWORD_MAP: Record<string, string> = {
+  // US
+  technology: "technology", tech: "technology", software: "technology", semiconductor: "technology",
+  healthcare: "healthcare", biotech: "healthcare", pharma: "healthcare", pharmaceutical: "healthcare",
+  financial: "financials", financials: "financials", banking: "financials", bank: "financials",
+  energy: "energy", oil: "energy", gas: "energy",
+  consumer: "consumer", retail: "consumer",
+  industrial: "industrials", industrials: "industrials",
+  utility: "utilities", utilities: "utilities",
+  realty: "realty", "real estate": "realty", reit: "realty",
+  // IN
+  it: "it", "information technology": "it",
+  fmcg: "fmcg", "fast moving": "fmcg",
+  auto: "auto", automobile: "auto", automotive: "auto",
+  metals: "metals", steel: "metals", aluminium: "metals",
+  // CRYPTO
+  defi: "defi", "decentralized finance": "defi",
+  layer1: "layer1", "layer 1": "layer1", l1: "layer1",
+  layer2: "layer2", "layer 2": "layer2", l2: "layer2",
+  gaming: "gaming", "play to earn": "gaming",
+};
+
 interface MarketContext {
   marketPrompt: string;
   newsHeadlines: string[];
@@ -234,11 +260,63 @@ async function fetchMarketContext(market: string = "US"): Promise<MarketContext>
   return result;
 }
 
+async function fetchScreenerContext(
+  market: string,
+  description: string,
+  engineUrl: string
+): Promise<string | null> {
+  const lower = description.toLowerCase();
+
+  // Find first matching sector keyword
+  let detectedSector: string | null = null;
+  for (const [keyword, sector] of Object.entries(SECTOR_KEYWORD_MAP)) {
+    if (lower.includes(keyword)) {
+      detectedSector = sector;
+      break;
+    }
+  }
+
+  if (!detectedSector) return null;
+
+  try {
+    const url = `${engineUrl}/screener?market=${market}&sector=${detectedSector}&limit=8`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) return null;
+    const data = await res.json() as {
+      success: boolean;
+      stocks: Array<{
+        ticker: string;
+        price: number;
+        return_1m: number | null;
+        above_ema200: boolean | null;
+        pe_ratio: number | null;
+        trend: string;
+        currency: string;
+      }>;
+    };
+    if (!data.success || !data.stocks?.length) return null;
+
+    const currency = data.stocks[0]?.currency ?? "USD";
+    const symbol = currency === "INR" ? "₹" : "$";
+    const lines = data.stocks.slice(0, 6).map((s) => {
+      const ret = s.return_1m != null ? `${s.return_1m > 0 ? "+" : ""}${s.return_1m.toFixed(1)}% 1M` : "N/A 1M";
+      const ma = s.above_ema200 === true ? "above EMA200" : s.above_ema200 === false ? "below EMA200" : "";
+      const pe = s.pe_ratio != null ? `P/E: ${s.pe_ratio}` : "";
+      const parts = [ret, ma, pe].filter(Boolean).join(", ");
+      return `- ${s.ticker}: ${symbol}${s.price.toLocaleString()} (${parts}, ${s.trend.toUpperCase()})`;
+    });
+
+    return `[TOP ${detectedSector.toUpperCase()} STOCKS — ${market}]\n${lines.join("\n")}`;
+  } catch {
+    return null; // Non-fatal — screener failure should never block generation
+  }
+}
+
 // ============================================================
 // User Prompt Builder
 // ============================================================
 
-function buildUserPrompt(input: UserStrategyInput, context?: MarketContext): string {
+function buildUserPrompt(input: UserStrategyInput, context?: MarketContext, screenerContext?: string | null): string {
   let prompt = "";
 
   // Inject market context if available
@@ -253,6 +331,11 @@ function buildUserPrompt(input: UserStrategyInput, context?: MarketContext): str
       prompt += `- ${headline}\n`;
     }
     prompt += `\n`;
+  }
+
+  // Inject screener context if available
+  if (screenerContext) {
+    prompt += `${screenerContext}\n\n`;
   }
 
   prompt += `[USER REQUEST]\n`;
@@ -293,16 +376,20 @@ export class StrategyGenerator {
    * Fetches current market context to inject into the prompt.
    */
   async generate(input: UserStrategyInput): Promise<StrategyDefinition> {
-    // Fetch market context (non-blocking — uses defaults if unavailable)
+    // Fetch market context and screener context in parallel (both non-blocking)
     const market = input.preferences?.market || "US";
     let context: MarketContext | undefined;
+    let screenerContext: string | null = null;
     try {
-      context = await fetchMarketContext(market);
+      [context, screenerContext] = await Promise.all([
+        fetchMarketContext(market),
+        fetchScreenerContext(market, input.description, ENGINE_URL),
+      ]);
     } catch (e) {
       console.warn("Market context fetch failed (non-fatal):", (e as Error).message);
     }
 
-    const userPrompt = buildUserPrompt(input, context);
+    const userPrompt = buildUserPrompt(input, context, screenerContext);
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < 2; attempt++) {

@@ -232,6 +232,71 @@ function detectUnsupportedInstruments(description: string): {
   };
 }
 
+// ============================================================
+// Vague prompt detection
+// ============================================================
+
+function detectVaguePrompt(
+  description: string,
+  market: string = "US"
+): { questions: Array<{ id: string; label: string; options?: string[] }> } | null {
+  const words = description.trim().split(/\s+/).filter(Boolean);
+
+  // Specific enough signals — skip clarification
+  const TICKER_RE = /\b[A-Z]{1,5}(-USD)?\b|\b[A-Z]+\.NS\b/;
+  const INDICATOR_RE = /\b(EMA|SMA|RSI|MACD|VWAP|ATR|BB|stoch|ADX|supertrend|bollinger|moving average|momentum|breakout|reversal|golden cross|death cross)\b/i;
+  const SECTOR_RE = /\b(technology|tech|healthcare|financials|finance|banking|bank|energy|consumer|industrial|utilities|realty|real estate|IT|pharma|auto|fmcg|metals|layer1|layer2|defi|gaming|crypto)\b/i;
+  const STRATEGY_STYLE_RE = /\b(momentum|mean reversion|swing|trend following|breakout|value|growth|dividend|short|long|hedge)\b/i;
+
+  const hasTickerOrSector = TICKER_RE.test(description) || SECTOR_RE.test(description);
+  const hasStrategyDetail = INDICATOR_RE.test(description) || STRATEGY_STYLE_RE.test(description);
+
+  // If description is long enough AND has at least sector or strategy detail → not vague
+  if (words.length >= 15 && (hasTickerOrSector || hasStrategyDetail)) return null;
+  // If short but has ticker AND indicator → specific enough
+  if (hasTickerOrSector && hasStrategyDetail) return null;
+  // 3+ words with clear sector mention is enough
+  if (words.length >= 3 && hasTickerOrSector) return null;
+
+  // Too vague — return questions
+  const questions: Array<{ id: string; label: string; options?: string[] }> = [];
+
+  const SECTOR_OPTIONS: Record<string, string[]> = {
+    US:     ["Technology", "Healthcare", "Financials", "Energy", "Consumer", "Industrials"],
+    IN:     ["IT", "Banking", "Pharma", "Energy", "Auto", "FMCG", "Metals"],
+    CRYPTO: ["Layer 1", "DeFi", "Layer 2", "Gaming", "Exchange tokens"],
+  };
+
+  if (!hasTickerOrSector) {
+    questions.push({
+      id: "sector",
+      label: market === "CRYPTO" ? "Which category?" : "Which sector are you interested in?",
+      options: SECTOR_OPTIONS[market] ?? SECTOR_OPTIONS["US"],
+    });
+  }
+
+  if (!hasStrategyDetail) {
+    questions.push({
+      id: "style",
+      label: "What's your investment style?",
+      options: ["Momentum / ride the trend", "Buy the dip / mean reversion", "Breakout / new highs", "Not sure — suggest one"],
+    });
+  }
+
+  questions.push({
+    id: "horizon",
+    label: "Investment horizon?",
+    options: ["Days (swing trade)", "Weeks (short-term)", "Months (medium-term)", "1+ year (long-term)"],
+  });
+
+  questions.push({
+    id: "capital",
+    label: market === "IN" ? "How much capital? (₹)" : "How much capital? ($)",
+  });
+
+  return { questions };
+}
+
 export const strategiesRouter = Router();
 
 // ============================================================
@@ -319,11 +384,13 @@ strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) 
       return res.status(200).json({ success: false, ...unsupportedCheck });
     }
 
-    // Detect market from description if not provided in preferences
-    // so market context fetch uses the right market (IN vs US)
-    const INDIA_MARKET_RE = /\b(nifty|sensex|nse|bse|india[n]?|inr|rupee|\.ns\b|reliance|tcs|infosys|hdfc|zerodha)\b/i;
-    const detectedMarket: "US" | "IN" = INDIA_MARKET_RE.test(description) ? "IN" : "US";
-    const mergedPreferences = { ...preferences, market: preferences?.market ?? detectedMarket };
+    const mergedPreferences = { ...preferences, market: preferences?.market ?? "US" };
+
+    // Vague prompt detection — ask for detail before burning an AI call
+    const clarification = detectVaguePrompt(description, mergedPreferences?.market as string);
+    if (clarification) {
+      return res.status(200).json({ success: false, needs_clarification: true, ...clarification });
+    }
 
     // Import the generator dynamically
     const { createGenerator } = await import("../ai/generator.js");
