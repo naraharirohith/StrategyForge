@@ -72,6 +72,24 @@ MARKET_CONFIG = {
             "LT.NS", "TATAMOTORS.NS", "SUNPHARMA.NS",
         ],
     },
+    "CRYPTO": {
+        "indices": {
+            "BTC-USD": "Bitcoin",
+            "ETH-USD": "Ethereum",
+        },
+        "vix_ticker": None,  # No VIX for crypto — BTC vol proxy used instead
+        "sectors": {
+            "layer1": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "ADA-USD"],
+            "defi": ["UNI-USD", "AAVE-USD", "MKR-USD", "CRV-USD"],
+            "layer2": ["MATIC-USD", "ARB-USD", "OP-USD"],
+            "exchange": ["BNB-USD", "OKB-USD"],
+            "gaming": ["AXS-USD", "SAND-USD", "MANA-USD"],
+        },
+        "hot_ticker_pool": [
+            "BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "BNB-USD",
+            "MATIC-USD", "LINK-USD", "UNI-USD", "ADA-USD", "DOT-USD",
+        ],
+    },
 }
 
 
@@ -102,7 +120,7 @@ class MarketSnapshot:
             "timestamp": pd.Timestamp.now().isoformat(),
             "market": market,
             "indices": _compute_indices(config["indices"]),
-            "fear_greed": _compute_fear_greed(config.get("vix_ticker", "^VIX")),
+            "fear_greed": _compute_fear_greed(config["vix_ticker"]),
             "sectors": _compute_sectors(config["sectors"]),
             "regime": "unknown",
             "hot_tickers": [],
@@ -152,7 +170,12 @@ class MarketSnapshot:
 
         # Fear/Greed
         fg = snap["fear_greed"]
-        lines.append(f"VIX: {fg.get('vix', 'N/A')} ({fg.get('level', 'unknown').replace('_', ' ')})")
+        vix_val = fg.get("vix", "N/A")
+        level_str = fg.get("level", "unknown").replace("_", " ")
+        if fg.get("is_vol_proxy"):
+            lines.append(f"BTC 30d Vol (fear proxy): {vix_val}% ({level_str})")
+        else:
+            lines.append(f"VIX: {vix_val} ({level_str})")
 
         # Sectors
         sectors = snap["sectors"]
@@ -221,9 +244,36 @@ def _compute_indices(indices: dict) -> dict:
     return result
 
 
-def _compute_fear_greed(vix_ticker: str) -> dict:
-    """Compute fear/greed level from VIX."""
+def _compute_fear_greed(vix_ticker: Optional[str]) -> dict:
+    """Compute fear/greed level from VIX, or BTC volatility for crypto."""
     import yfinance as yf
+
+    if vix_ticker is None:
+        # Use BTC 30-day realized vol as crypto fear proxy
+        try:
+            hist = yf.Ticker("BTC-USD").history(period="35d", interval="1d", auto_adjust=True)
+            if not hist.empty and len(hist) >= 20:
+                returns = hist["Close"].pct_change().dropna()
+                vol_30d = float(returns.std() * (365 ** 0.5) * 100)  # annualized %
+                if vol_30d > 100:
+                    level = "extreme_fear"
+                elif vol_30d > 70:
+                    level = "high_fear"
+                elif vol_30d > 50:
+                    level = "moderate_fear"
+                elif vol_30d > 30:
+                    level = "low_fear"
+                else:
+                    level = "greed"
+                return {
+                    "vix": round(vol_30d, 1),
+                    "level": level,
+                    "percentile_1y": 50.0,
+                    "is_vol_proxy": True,
+                }
+        except Exception:
+            pass
+        return {"vix": None, "level": "unknown", "percentile_1y": 50.0, "is_vol_proxy": True}
 
     try:
         data = yf.download(vix_ticker, period="1y", interval="1d", progress=False, auto_adjust=True)
@@ -260,11 +310,26 @@ def _compute_fear_greed(vix_ticker: str) -> dict:
 
 
 def _compute_sectors(sectors: dict) -> dict:
-    """Compute 1-month change and rank for each sector ETF/index."""
+    """Compute 1-month change and rank for each sector ETF/index.
+
+    Sector values may be a single ticker string (US/IN) or a list of tickers
+    (CRYPTO). When a list is provided, the representative ticker (first element)
+    is used for the performance calculation.
+    """
     import yfinance as yf
 
     result = {}
-    for name, ticker in sectors.items():
+    for name, ticker_or_list in sectors.items():
+        # Normalise: crypto sectors are lists — use the first ticker as representative
+        if isinstance(ticker_or_list, list):
+            if not ticker_or_list:
+                continue
+            ticker = ticker_or_list[0]
+            display_ticker = ticker
+        else:
+            ticker = ticker_or_list
+            display_ticker = ticker_or_list
+
         try:
             data = yf.download(ticker, period="60d", interval="1d", progress=False, auto_adjust=True)
             if isinstance(data.columns, pd.MultiIndex):
@@ -280,7 +345,7 @@ def _compute_sectors(sectors: dict) -> dict:
                 change_1m = ((current / float(close.iloc[0])) - 1) * 100
 
             result[name] = {
-                "ticker": ticker,
+                "ticker": display_ticker,
                 "change_1m": round(change_1m, 2),
             }
         except Exception:
