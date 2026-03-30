@@ -13,6 +13,66 @@ import { TradeTable } from "@/components/backtest/TradeTable";
 import { MethodologyDisclosure } from "@/components/backtest/MethodologyDisclosure";
 import { SimpleMode } from "@/components/simple/SimpleMode";
 
+type Market = "US" | "IN" | "CRYPTO";
+
+interface SectorTile {
+  label: string;
+  value: string;
+  icon: string;
+}
+
+interface MarketConfig {
+  flag: string;
+  label: string;
+  currency: string;
+  sectors: SectorTile[];
+  promptHint: string;
+}
+
+const MARKET_CONFIG: Record<Market, MarketConfig> = {
+  US: {
+    flag: "🇺🇸",
+    label: "US",
+    currency: "USD",
+    sectors: [
+      { label: "Technology", value: "technology", icon: "💻" },
+      { label: "Healthcare", value: "healthcare", icon: "🏥" },
+      { label: "Financials", value: "financials", icon: "🏦" },
+      { label: "Energy", value: "energy", icon: "⚡" },
+      { label: "Consumer", value: "consumer", icon: "🛍️" },
+      { label: "Industrials", value: "industrials", icon: "🏭" },
+    ],
+    promptHint: "e.g. I want to invest in tech stocks with good momentum",
+  },
+  IN: {
+    flag: "🇮🇳",
+    label: "India",
+    currency: "INR",
+    sectors: [
+      { label: "IT", value: "it", icon: "💻" },
+      { label: "Banking", value: "banking", icon: "🏦" },
+      { label: "Pharma", value: "pharma", icon: "💊" },
+      { label: "Energy", value: "energy", icon: "⚡" },
+      { label: "Auto", value: "auto", icon: "🚗" },
+      { label: "FMCG", value: "fmcg", icon: "🛒" },
+    ],
+    promptHint: "e.g. I want to invest in Nifty IT stocks with strong momentum",
+  },
+  CRYPTO: {
+    flag: "₿",
+    label: "Crypto",
+    currency: "USD",
+    sectors: [
+      { label: "Layer 1", value: "layer1", icon: "⛓️" },
+      { label: "DeFi", value: "defi", icon: "🔄" },
+      { label: "Layer 2", value: "layer2", icon: "⚡" },
+      { label: "Gaming", value: "gaming", icon: "🎮" },
+      { label: "Exchange", value: "exchange", icon: "💱" },
+    ],
+    promptHint: "e.g. I want to invest in Layer 1 coins with bullish momentum",
+  },
+};
+
 const SAFE_TEMPLATES = [
   { category: "Momentum", label: "Golden Cross - US Large Caps", value: "Create a daily momentum strategy for AAPL, MSFT, and GOOGL using EMA 20 and EMA 50 with RSI(14) confirmation. Moderate risk. Enter long when EMA 20 crosses above EMA 50 and RSI stays below 65. Use a 5% stop loss, 12% take profit, and a 20-bar time exit. Keep timeframe at 1d." },
   { category: "Momentum", label: "Breakout - Volume Surge", value: "Create a daily breakout strategy for NVDA, AMZN, META, and TSLA. Use Donchian Channel 20-day breakout, volume SMA(20), and ADX(14). Enter long when price breaks the 20-day high, volume is above volume SMA, and ADX is above 20. Aggressive risk with 7% stop loss, 18% take profit, and trailing stop 8%. Keep timeframe at 1d." },
@@ -49,6 +109,7 @@ function slugify(name: string): string {
 
 export default function Home() {
   const [mode,        setMode]        = useState<"simple" | "expert">("simple");
+  const [market,      setMarket]      = useState<Market>("US");
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("gemini");
   const [step,        setStep]        = useState<Step>("idle");
@@ -60,6 +121,16 @@ export default function Home() {
   const [confidence,  setConfidence]  = useState<AnyObj | null>(null);
   const [progressMsg, setProgressMsg] = useState<string | null>(null);
   const { toast } = useToast();
+
+  function handleSectorClick(sector: SectorTile) {
+    const hint =
+      market === "IN"
+        ? `I want to invest in India ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`
+        : market === "CRYPTO"
+        ? `I want to invest in ${sector.label} crypto assets. Show me which coins are performing well and suggest an entry strategy.`
+        : `I want to invest in US ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`;
+    setPrompt(hint);
+  }
 
   function handleSwitchToExpert(loadedStrategy?: AnyObj) {
     setMode("expert");
@@ -79,7 +150,11 @@ export default function Home() {
     setBacktest(null);
     setConfidence(null);
     try {
-      const data = await generateStrategy(prompt.trim(), undefined, provider);
+      const data = await generateStrategy(
+        prompt.trim(),
+        { market, currency: MARKET_CONFIG[market].currency },
+        provider,
+      );
       if (data.unsupported) {
         setRedirect({ message: data.message, suggestion: data.suggestion });
         setStep("idle");
@@ -200,15 +275,51 @@ export default function Home() {
         {/* Expert Mode */}
         {mode === "expert" && (
           <>
+            {/* Market Toggle */}
+            <div className="flex gap-2 mb-6">
+              {(Object.keys(MARKET_CONFIG) as Market[]).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => {
+                    setMarket(m);
+                    setPrompt("");
+                    setStrategy(null);
+                    setBacktest(null);
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
+                    market === m
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white border border-white/10"
+                  }`}
+                >
+                  <span>{MARKET_CONFIG[m].flag}</span>
+                  <span>{MARKET_CONFIG[m].label}</span>
+                </button>
+              ))}
+            </div>
+
             {/* Input */}
             <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
               <label className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                 Describe your strategy
               </label>
+              {/* Sector Tiles */}
+              <div className="flex flex-wrap gap-2 mb-4">
+                {MARKET_CONFIG[market].sectors.map((sector) => (
+                  <button
+                    key={sector.value}
+                    onClick={() => handleSectorClick(sector)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/5 border border-white/10 text-gray-300 hover:bg-blue-600/20 hover:border-blue-500/50 hover:text-white transition-all"
+                  >
+                    <span>{sector.icon}</span>
+                    <span>{sector.label}</span>
+                  </button>
+                ))}
+              </div>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Momentum strategy for top US tech stocks, moderate risk, hold 1-2 weeks using RSI and EMA crossover..."
+                placeholder={MARKET_CONFIG[market].promptHint}
                 rows={3}
                 className="w-full resize-none rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               />
