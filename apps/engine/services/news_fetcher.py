@@ -19,10 +19,10 @@ class NewsFetcher:
     """Fetch financial headlines from multiple providers with graceful fallback."""
 
     CACHE_TTL = 6 * 60 * 60
-    GOOGLE_RSS_URL = (
-        "https://news.google.com/rss/topics/"
-        "CAAqJggKIiBDQkFTRWdvSUwyMHZNRGx6TVdZU0FtVnVHZ0pWVXlnQVAB"
-    )
+    GOOGLE_RSS_URLS = {
+        "US": "https://news.google.com/rss/search?q=US+stock+market+S%26P500+finance&hl=en-US&gl=US&ceid=US:en",
+        "IN": "https://news.google.com/rss/search?q=India+stock+market+NSE+Nifty+Sensex&hl=en-IN&gl=IN&ceid=IN:en",
+    }
     _cache: dict[tuple[str, int], dict] = {}
 
     def __init__(self):
@@ -125,9 +125,10 @@ class NewsFetcher:
             if article.get("title")
         ][:limit]
 
-    def _fetch_google_rss(self, _market: str, limit: int) -> tuple[str, list[dict]]:
+    def _fetch_google_rss(self, market: str, limit: int) -> tuple[str, list[dict]]:
+        url = self.GOOGLE_RSS_URLS.get(market, self.GOOGLE_RSS_URLS["US"])
         request = urllib.request.Request(
-            self.GOOGLE_RSS_URL,
+            url,
             headers={"User-Agent": "StrategyForge/1.0"},
         )
         with urllib.request.urlopen(request, timeout=10) as response:
