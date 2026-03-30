@@ -285,6 +285,8 @@ export default function Home() {
                     setPrompt("");
                     setStrategy(null);
                     setBacktest(null);
+                    setConfidence(null);
+                    setStep("idle");
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     market === m

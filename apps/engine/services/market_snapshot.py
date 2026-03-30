@@ -173,7 +173,8 @@ class MarketSnapshot:
         vix_val = fg.get("vix", "N/A")
         level_str = fg.get("level", "unknown").replace("_", " ")
         if fg.get("is_vol_proxy"):
-            lines.append(f"BTC 30d Vol (fear proxy): {vix_val}% ({level_str})")
+            vol_display = f"{vix_val}%" if vix_val not in (None, "N/A") else "N/A"
+            lines.append(f"BTC 30d Vol (fear proxy): {vol_display} ({level_str})")
         else:
             lines.append(f"VIX: {vix_val} ({level_str})")
 
