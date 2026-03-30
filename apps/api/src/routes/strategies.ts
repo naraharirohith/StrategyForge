@@ -764,6 +764,73 @@ strategiesRouter.delete("/strategies/:id", async (req, res) => {
 });
 
 // ============================================================
+// Plain-English Result Translator
+// ============================================================
+
+strategiesRouter.post("/strategies/explain", async (req, res) => {
+  try {
+    const { summary, strategy, initial_capital } = req.body as {
+      summary: Record<string, number>;
+      strategy: { universe?: { market?: string }; backtest_config?: { currency?: string } };
+      initial_capital: number;
+    };
+
+    if (!summary || !strategy) {
+      return res.status(400).json({ error: "summary and strategy are required" });
+    }
+
+    const currency = strategy?.backtest_config?.currency ?? "USD";
+    const symbol = currency === "INR" ? "₹" : "$";
+    const market = strategy?.universe?.market ?? "US";
+
+    // Build a tight prompt for plain-English explanation
+    const prompt = `You are a friendly financial analyst explaining a backtest result to a retail investor.
+
+Market: ${market} | Currency: ${currency}
+Initial capital: ${symbol}${initial_capital.toLocaleString()}
+
+Key metrics:
+- Total return: ${summary.total_return_percent?.toFixed(1)}%
+- Annualized return: ${summary.annualized_return_percent?.toFixed(1)}%
+- Benchmark (buy & hold) return: ${summary.benchmark_return_percent?.toFixed(1)}%
+- Max drawdown: ${summary.max_drawdown_percent?.toFixed(1)}%
+- Win rate: ${summary.win_rate?.toFixed(0)}%
+- Total trades: ${summary.total_trades}
+- Sharpe ratio: ${summary.sharpe_ratio?.toFixed(2)}
+
+Write 2-3 short, plain-English sentences that explain:
+1. How much money the user would have made (in ${symbol} terms)
+2. Whether it beat buy-and-hold and by how much
+3. The worst loss they would have experienced
+
+Use simple language, no jargon. Do NOT mention Sharpe ratio or other technical terms.
+Be honest — if the strategy underperformed, say so plainly.
+Respond with ONLY the 2-3 sentences, no labels, no markdown.`;
+
+    const { resolveProvider } = await import("../ai/generator.js");
+    // Prefer gemini (fast + cheap) for this simple task
+    const providerName = process.env.GEMINI_API_KEY ? "gemini"
+      : process.env.ANTHROPIC_API_KEY ? "claude"
+      : process.env.OPENAI_API_KEY ? "openai" : null;
+
+    if (!providerName) {
+      return res.json({ success: false, explanation: null, error: "No AI provider configured" });
+    }
+
+    const provider = resolveProvider(providerName);
+    const explanation = await provider.generate(
+      "You are a concise financial analyst. Respond with plain sentences only, no markdown.",
+      prompt
+    );
+
+    return res.json({ success: true, explanation: explanation.trim() });
+  } catch (e) {
+    console.error("Explain error:", e);
+    return res.json({ success: false, explanation: null, error: String(e) });
+  }
+});
+
+// ============================================================
 // Confidence Score
 // ============================================================
 
