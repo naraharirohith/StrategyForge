@@ -120,6 +120,10 @@ export default function Home() {
   const [backtest,    setBacktest]    = useState<AnyObj | null>(null);
   const [confidence,  setConfidence]  = useState<AnyObj | null>(null);
   const [progressMsg, setProgressMsg] = useState<string | null>(null);
+  const [clarification, setClarification] = useState<{
+    questions: Array<{ id: string; label: string; options?: string[] }>;
+  } | null>(null);
+  const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   function handleSectorClick(sector: SectorTile) {
@@ -140,8 +144,9 @@ export default function Home() {
     }
   }
 
-  async function handleGenerate() {
-    if (!prompt.trim()) return;
+  async function handleGenerate(overridePrompt?: string) {
+    const descriptionToUse = (overridePrompt ?? prompt).trim();
+    if (!descriptionToUse) return;
     setStep("generating");
     setError(null);
     setRedirect(null);
@@ -151,12 +156,18 @@ export default function Home() {
     setConfidence(null);
     try {
       const data = await generateStrategy(
-        prompt.trim(),
+        descriptionToUse,
         { market, currency: MARKET_CONFIG[market].currency },
         provider,
       );
       if (data.unsupported) {
         setRedirect({ message: data.message, suggestion: data.suggestion });
+        setStep("idle");
+        return;
+      }
+      // Handle clarification request
+      if (data.needs_clarification && data.questions) {
+        setClarification({ questions: data.questions });
         setStep("idle");
         return;
       }
@@ -169,6 +180,20 @@ export default function Home() {
       toast(msg);
       setStep("idle");
     }
+  }
+
+  function handleClarificationSubmit() {
+    const parts: string[] = [prompt.trim()];
+    const { sector, style, horizon, capital } = clarificationAnswers;
+    if (sector) parts.push(`focusing on ${sector} sector`);
+    if (style) parts.push(`using ${style.toLowerCase()} approach`);
+    if (horizon) parts.push(`with ${horizon.toLowerCase()} horizon`);
+    if (capital) parts.push(`with ${capital} capital`);
+    const enriched = parts.join(", ");
+    setClarification(null);
+    setClarificationAnswers({});
+    setPrompt(enriched);
+    setTimeout(() => handleGenerate(enriched), 0);
   }
 
   async function handleBacktest() {
@@ -287,6 +312,8 @@ export default function Home() {
                     setBacktest(null);
                     setConfidence(null);
                     setStep("idle");
+                    setClarification(null);
+                    setClarificationAnswers({});
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     market === m
@@ -370,7 +397,7 @@ export default function Home() {
                   Powered by {provider === "gemini" ? "Gemini Flash" : provider === "claude" ? "Claude" : provider === "openai" ? "GPT-4o" : "OpenRouter"}
                 </p>
                 <button
-                  onClick={handleGenerate}
+                  onClick={() => handleGenerate()}
                   disabled={!prompt.trim() || isGenerating || isBacktesting}
                   className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -382,6 +409,61 @@ export default function Home() {
                 </button>
               </div>
             </div>
+
+            {/* Clarification UI */}
+            {clarification && (
+              <div className="mt-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                <p className="text-sm font-medium text-amber-300 mb-3">
+                  Help us tailor your strategy — answer a few quick questions:
+                </p>
+                <div className="space-y-3">
+                  {clarification.questions.map((q) => (
+                    <div key={q.id}>
+                      <p className="text-xs text-gray-400 mb-1.5">{q.label}</p>
+                      {q.options ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {q.options.map((opt) => (
+                            <button
+                              key={opt}
+                              onClick={() => setClarificationAnswers(a => ({ ...a, [q.id]: opt }))}
+                              className={`px-3 py-1 rounded-full text-xs transition-all ${
+                                clarificationAnswers[q.id] === opt
+                                  ? "bg-blue-600 text-white"
+                                  : "bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10"
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <input
+                          type="text"
+                          value={clarificationAnswers[q.id] ?? ""}
+                          onChange={(e) => setClarificationAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                          placeholder={q.label}
+                          className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-4">
+                  <button
+                    onClick={handleClarificationSubmit}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    Generate strategy →
+                  </button>
+                  <button
+                    onClick={() => { setClarification(null); handleGenerate(); }}
+                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 text-sm rounded-lg transition-colors border border-white/10"
+                  >
+                    Generate anyway
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* Unsupported instrument redirect */}
             {redirect && (
