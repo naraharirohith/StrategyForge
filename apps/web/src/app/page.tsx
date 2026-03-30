@@ -335,6 +335,7 @@ export default function Home() {
                     setStrategy(null);
                     setBacktest(null);
                     setConfidence(null);
+                    setExplanation(null);
                     setStep("idle");
                     setClarification(null);
                     setClarificationAnswers({});
@@ -612,6 +613,13 @@ export default function Home() {
                       <p className="text-sm font-semibold text-amber-300">No trades executed</p>
                       <p className="text-xs text-amber-200/70 mt-0.5">{String(backtest.zero_trades_warning)}</p>
                     </div>
+                  </div>
+                )}
+
+                {explanation && !backtest?.zero_trades_warning && (
+                  <div className="mb-4 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-xs font-semibold text-blue-300 mb-1">In plain English</p>
+                    <p className="text-sm text-blue-100/80 leading-relaxed">{explanation}</p>
                   </div>
                 )}
 

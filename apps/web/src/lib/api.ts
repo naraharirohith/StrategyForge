@@ -232,6 +232,24 @@ export function streamBacktest(
   return () => controller.abort();
 }
 
+export async function explainBacktest(
+  summary: Record<string, number>,
+  strategy: Record<string, unknown>,
+  initialCapital: number
+): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_URL}/api/strategies/explain`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ summary, strategy, initial_capital: initialCapital }),
+    });
+    const data = await res.json();
+    return data.explanation ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function getConfidenceScore(
   strategy: Record<string, unknown>,
   backtestResult: Record<string, unknown>,
