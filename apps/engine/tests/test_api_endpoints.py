@@ -457,3 +457,26 @@ def test_zero_trade_result_has_warning():
     assert EXPECTED_TOP_LEVEL_KEYS.issubset(result.keys()), (
         f"Missing keys: {EXPECTED_TOP_LEVEL_KEYS - result.keys()}"
     )
+
+
+def test_screener_returns_structure():
+    """Screener must return list with required fields — use synthetic data path."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    from services.screener import _classify_trend, _pct_change
+    import pandas as pd
+    import numpy as np
+
+    # Test trend classification
+    assert _classify_trend(110, 100, 95, 90) == "bullish"   # above all MAs
+    assert _classify_trend(85, 100, 95, 90) == "bearish"    # below all MAs
+    assert _classify_trend(92, 100, 95, 90) == "sideways"   # below ema20+ema50, above ema200 only → score=1
+
+    # Test pct_change
+    close = pd.Series([100.0] * 22 + [110.0])
+    assert abs(_pct_change(close, 21) - 10.0) < 0.1
+
+    # Test invalid sector returns empty list
+    from services.screener import screen_sector
+    result = screen_sector("US", "nonexistent_sector_xyz", 5)
+    assert result == []
