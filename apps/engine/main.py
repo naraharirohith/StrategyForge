@@ -493,6 +493,23 @@ async def get_market_prompt(market: str = "US"):
         return {"success": False, "error": str(e)}
 
 
+@app.get("/screener")
+async def screener_endpoint(market: str = "US", sector: str = "technology", limit: int = 10):
+    """
+    Get top stocks in a sector ranked by 1-month momentum.
+
+    Returns price, 1M/3M returns, MA status, P/E, trend for each stock.
+    Results cached 1 hour.
+    """
+    try:
+        from services.screener import screen_sector
+        limit = max(1, min(int(limit), 20))
+        results = screen_sector(market, sector, limit)
+        return {"success": True, "market": market, "sector": sector, "stocks": results}
+    except Exception as e:
+        return {"success": False, "error": str(e), "stocks": []}
+
+
 @app.get("/news")
 async def get_news(market: str = "US", limit: int = 10):
     """
