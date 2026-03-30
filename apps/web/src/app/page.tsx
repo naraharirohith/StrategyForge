@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { generateStrategy, streamBacktest, getConfidenceScore } from "@/lib/api";
+import { generateStrategy, streamBacktest, getConfidenceScore, explainBacktest } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
@@ -13,7 +13,7 @@ import { TradeTable } from "@/components/backtest/TradeTable";
 import { MethodologyDisclosure } from "@/components/backtest/MethodologyDisclosure";
 import { SimpleMode } from "@/components/simple/SimpleMode";
 
-type Market = "US" | "IN" | "CRYPTO";
+type Market = "US" | "IN";
 
 interface SectorTile {
   label: string;
@@ -27,6 +27,24 @@ interface MarketConfig {
   currency: string;
   sectors: SectorTile[];
   promptHint: string;
+}
+
+interface SectorStock {
+  ticker: string;
+  price: number;
+  return_1m: number | null;
+  above_ema200: boolean | null;
+  pe_ratio: number | null;
+  trend: "bullish" | "bearish" | "sideways";
+  currency: string;
+}
+
+async function fetchSectorStocks(market: Market, sector: string): Promise<SectorStock[]> {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+  const res = await fetch(`${API_URL}/api/market/screener?market=${market}&sector=${sector}&limit=6`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.stocks ?? []) as SectorStock[];
 }
 
 const MARKET_CONFIG: Record<Market, MarketConfig> = {
@@ -57,19 +75,6 @@ const MARKET_CONFIG: Record<Market, MarketConfig> = {
       { label: "FMCG", value: "fmcg", icon: "🛒" },
     ],
     promptHint: "e.g. I want to invest in Nifty IT stocks with strong momentum",
-  },
-  CRYPTO: {
-    flag: "₿",
-    label: "Crypto",
-    currency: "USD",
-    sectors: [
-      { label: "Layer 1", value: "layer1", icon: "⛓️" },
-      { label: "DeFi", value: "defi", icon: "🔄" },
-      { label: "Layer 2", value: "layer2", icon: "⚡" },
-      { label: "Gaming", value: "gaming", icon: "🎮" },
-      { label: "Exchange", value: "exchange", icon: "💱" },
-    ],
-    promptHint: "e.g. I want to invest in Layer 1 coins with bullish momentum",
   },
 };
 
@@ -124,16 +129,22 @@ export default function Home() {
     questions: Array<{ id: string; label: string; options?: string[] }>;
   } | null>(null);
   const [clarificationAnswers, setClarificationAnswers] = useState<Record<string, string>>({});
+  const [sectorStocks, setSectorStocks] = useState<SectorStock[] | null>(null);
+  const [sectorLoading, setSectorLoading] = useState(false);
+  const [explanation, setExplanation] = useState<string | null>(null);
   const { toast } = useToast();
 
   function handleSectorClick(sector: SectorTile) {
-    const hint =
-      market === "IN"
-        ? `I want to invest in India ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`
-        : market === "CRYPTO"
-        ? `I want to invest in ${sector.label} crypto assets. Show me which coins are performing well and suggest an entry strategy.`
-        : `I want to invest in US ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`;
+    const hint = market === "IN"
+      ? `I want to invest in India ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`
+      : `I want to invest in US ${sector.label} sector stocks. Show me which stocks are performing well and suggest an entry strategy.`;
     setPrompt(hint);
+    setSectorStocks(null);
+    setSectorLoading(true);
+    fetchSectorStocks(market, sector.value)
+      .then(setSectorStocks)
+      .catch(() => setSectorStocks([]))
+      .finally(() => setSectorLoading(false));
   }
 
   function handleSwitchToExpert(loadedStrategy?: AnyObj) {
@@ -154,6 +165,7 @@ export default function Home() {
     setStrategyId(null);
     setBacktest(null);
     setConfidence(null);
+    setExplanation(null);
     try {
       const data = await generateStrategy(
         descriptionToUse,
@@ -201,6 +213,7 @@ export default function Home() {
     setStep("backtesting");
     setError(null);
     setConfidence(null);
+    setExplanation(null);
     setProgressMsg("Starting backtest...");
 
     try {
@@ -314,6 +327,7 @@ export default function Home() {
                     setStep("idle");
                     setClarification(null);
                     setClarificationAnswers({});
+                    setSectorStocks(null);
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     market === m
@@ -345,6 +359,52 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+
+              {/* Sector Screener Panel */}
+              {(sectorLoading || (sectorStocks && sectorStocks.length > 0)) && (
+                <div className="mb-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+                  {sectorLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                      <Spinner /> Loading top stocks...
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500 mb-2 font-medium">Top performers right now</p>
+                      <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                        {sectorStocks!.map((stock) => {
+                          const ret = stock.return_1m;
+                          const retStr = ret != null
+                            ? `${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%`
+                            : "N/A";
+                          const trendColor = stock.trend === "bullish"
+                            ? "text-emerald-400"
+                            : stock.trend === "bearish"
+                            ? "text-red-400"
+                            : "text-yellow-400";
+                          const retColor = ret != null && ret >= 0 ? "text-emerald-400" : "text-red-400";
+                          const symbol = stock.currency === "INR" ? "₹" : "$";
+                          return (
+                            <div
+                              key={stock.ticker}
+                              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/[0.08]"
+                            >
+                              <div>
+                                <p className="text-xs font-semibold text-white leading-none">{stock.ticker.replace(".NS", "")}</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">{symbol}{stock.price.toLocaleString()}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className={`text-xs font-medium ${retColor}`}>{retStr}</p>
+                                <p className={`text-[10px] ${trendColor} capitalize`}>{stock.trend}</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -533,6 +593,16 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
+
+                {!!backtest?.zero_trades_warning && (
+                  <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                    <span className="text-amber-400 mt-0.5 text-base">⚠️</span>
+                    <div>
+                      <p className="text-sm font-semibold text-amber-300">No trades executed</p>
+                      <p className="text-xs text-amber-200/70 mt-0.5">{String(backtest.zero_trades_warning)}</p>
+                    </div>
+                  </div>
+                )}
 
                 {!!backtest.summary && (backtest.summary as any).total_trades < 30 && (
                   <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">

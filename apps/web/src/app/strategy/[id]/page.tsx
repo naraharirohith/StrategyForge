@@ -269,6 +269,17 @@ export default function StrategyDetailPage() {
               </div>
             )}
 
+            {/* Zero trades warning */}
+            {!!backtest?.zero_trades_warning && (
+              <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                <span className="text-amber-400 mt-0.5 text-base">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">No trades executed</p>
+                  <p className="text-xs text-amber-200/70 mt-0.5">{String(backtest.zero_trades_warning)}</p>
+                </div>
+              </div>
+            )}
+
             {/* Metrics */}
             {summary && (
               <MetricsSummary summary={summary as any} />
@@ -301,6 +312,15 @@ export default function StrategyDetailPage() {
         {/* Tab: Performance */}
         {tab === "Performance" && (
           <div className="space-y-6">
+            {!!backtest?.zero_trades_warning && (
+              <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                <span className="text-amber-400 mt-0.5 text-base">⚠️</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-300">No trades executed</p>
+                  <p className="text-xs text-amber-200/70 mt-0.5">{String(backtest.zero_trades_warning)}</p>
+                </div>
+              </div>
+            )}
             {backtest ? (
               <>
                 {backtest.equity_curve && (
