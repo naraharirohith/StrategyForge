@@ -20,7 +20,6 @@ ASSET_UNIVERSE = {
     "fmcg": {"US": ["XLP"], "IN": ["HINDUNILVR.NS", "ITC.NS", "NESTLEIND.NS"]},
 
     # Market cap
-    "large_cap": {"US": ["SPY", "QQQ", "DIA"], "IN": ["NIFTYBEES.NS"]},
     "mid_cap": {"US": ["MDY", "IJH"], "IN": ["JUNIORBEES.NS"]},
     "small_cap": {"US": ["IWM", "IJR"], "IN": ["SMALLCAP50.NS"]},
 
@@ -35,6 +34,23 @@ ASSET_UNIVERSE = {
     "sensex": {"IN": ["^BSESN"]},
     "sp500": {"US": ["^GSPC"]},
     "nasdaq": {"US": ["^IXIC"]},
+
+    # Crypto — all entries use market key "CRYPTO"
+    "btc": {"CRYPTO": ["BTC-USD"]},
+    "bitcoin": {"CRYPTO": ["BTC-USD"]},
+    "eth": {"CRYPTO": ["ETH-USD"]},
+    "ethereum": {"CRYPTO": ["ETH-USD"]},
+    "defi": {"CRYPTO": ["UNI-USD", "AAVE-USD", "MKR-USD", "CRV-USD", "COMP-USD"]},
+    "layer1": {"CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "ADA-USD"]},
+    "l1": {"CRYPTO": ["BTC-USD", "ETH-USD", "SOL-USD", "AVAX-USD", "ADA-USD"]},
+    "layer2": {"CRYPTO": ["MATIC-USD", "ARB-USD", "OP-USD"]},
+    "l2": {"CRYPTO": ["MATIC-USD", "ARB-USD", "OP-USD"]},
+    "gaming": {"CRYPTO": ["AXS-USD", "SAND-USD", "MANA-USD", "GALA-USD"]},
+    "large_cap": {
+        "US": ["SPY", "QQQ", "DIA"],
+        "IN": ["NIFTYBEES.NS"],
+        "CRYPTO": ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "ADA-USD"],
+    },
 }
 
 

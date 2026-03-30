@@ -408,6 +408,52 @@ class TestConfidenceEndpoint:
 # ---------------------------------------------------------------------------
 
 
+def test_crypto_market_snapshot_structure():
+    """Crypto market snapshot must return valid structure without crashing."""
+    import sys, os
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    import pandas as pd
+    import numpy as np
+    from unittest.mock import patch, MagicMock
+
+    # Build a minimal synthetic history for BTC-USD to mock yfinance calls
+    n = 35
+    dates = pd.date_range("2025-01-01", periods=n, freq="D")
+    np.random.seed(7)
+    close = 40000.0 * np.exp(np.cumsum(np.random.normal(0.001, 0.02, n)))
+    synthetic_df = pd.DataFrame(
+        {
+            "Open": close,
+            "High": close * 1.01,
+            "Low": close * 0.99,
+            "Close": close,
+            "Volume": 1_000_000.0,
+        },
+        index=dates,
+    )
+
+    # Mock a Ticker instance whose .history() returns synthetic_df
+    mock_ticker = MagicMock()
+    mock_ticker.history.return_value = synthetic_df
+
+    with patch("yfinance.download", return_value=synthetic_df), \
+         patch("yfinance.Ticker", return_value=mock_ticker):
+        from services.market_snapshot import MarketSnapshot
+        import services.market_snapshot as _ms
+        # Clear any cached data to force a fresh compute
+        _ms._snapshot_cache.pop("CRYPTO", None)
+
+        snap = MarketSnapshot.compute("CRYPTO")
+
+    assert "market" in snap
+    assert snap["market"] == "CRYPTO"
+    assert "fear_greed" in snap
+    assert "regime" in snap
+    assert "indices" in snap
+    # Crypto fear_greed should carry is_vol_proxy flag
+    assert snap["fear_greed"].get("is_vol_proxy") is True
+
+
 def test_zero_trade_result_has_warning():
     """
     When backtest produces 0 trades, result must include a zero_trades_warning
