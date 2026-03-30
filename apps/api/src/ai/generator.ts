@@ -267,10 +267,16 @@ async function fetchScreenerContext(
 ): Promise<string | null> {
   const lower = description.toLowerCase();
 
-  // Find first matching sector keyword
+  // Find first matching sector keyword.
+  // Short ambiguous tokens use word-boundary regex to prevent substring matches
+  // like "quantitative" → "it" or "automatic" → "auto".
+  const WORD_BOUNDARY_KEYWORDS = new Set(["it", "auto", "l1", "l2", "gas", "oil"]);
   let detectedSector: string | null = null;
   for (const [keyword, sector] of Object.entries(SECTOR_KEYWORD_MAP)) {
-    if (lower.includes(keyword)) {
+    const matched = WORD_BOUNDARY_KEYWORDS.has(keyword)
+      ? new RegExp(`\\b${keyword}\\b`).test(lower)
+      : lower.includes(keyword);
+    if (matched) {
       detectedSector = sector;
       break;
     }
