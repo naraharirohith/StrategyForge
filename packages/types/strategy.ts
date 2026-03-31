@@ -556,5 +556,7 @@ export interface UserStrategyInput {
     preferred_indicators?: string[];
     avoid_sectors?: string[];
     holding_period?: string;       // "intraday", "1-5 days", "1-4 weeks", "1-6 months"
+    commission_percent?: number;   // e.g., 0.1 for US, 0.2 for IN
+    slippage_percent?: number;     // e.g., 0.05 for US, 0.1 for IN
   };
 }

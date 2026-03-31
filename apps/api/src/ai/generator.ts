@@ -429,6 +429,21 @@ export class StrategyGenerator {
         const strategy = this.parseStrategy(raw);
         this.normalizeEnums(strategy);
         this.repair(strategy);
+
+        // Apply market-correct commission and slippage from frontend config
+        if (input.preferences?.commission_percent != null) {
+          strategy.backtest_config = {
+            ...(strategy.backtest_config ?? {}),
+            commission_percent: input.preferences.commission_percent as number,
+          };
+        }
+        if (input.preferences?.slippage_percent != null) {
+          strategy.backtest_config = {
+            ...(strategy.backtest_config ?? {}),
+            slippage_percent: input.preferences.slippage_percent as number,
+          };
+        }
+
         this.validate(strategy);
 
         // Inject live screener tickers as the strategy universe (Option A)
