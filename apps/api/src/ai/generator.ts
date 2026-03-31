@@ -151,14 +151,31 @@ The "description" field should explain the strategy in plain English:
 - Expected behavior in different market regimes
 - Key risks the user should be aware of
 
+## Signal Frequency
+
+Target 20-80 entry signals per 5-year backtest on daily data (roughly 1-3 per month per ticker).
+- Prefer threshold conditions over cross conditions for primary filters. Cross conditions (crosses_above, crosses_below) fire only once per transition — use them as confirmation, not as the primary gate
+- Limit entry conditions to at most 2 AND conditions. Each additional AND condition reduces signal frequency exponentially
+- If you need more nuance, use OR groups: two OR sub-conditions each with 1-2 AND conditions
+- Cross conditions are especially rare on daily data — a golden cross (EMA50/EMA200) fires ~2-4x per year on a single ticker. Combining it with another AND condition can reduce signals to near-zero
+- Good pattern: "RSI < 40 AND price > SMA200" — fires 10-30x/year. Bad pattern: "EMA50 crosses_above EMA200 AND RSI < 50 AND MACD crosses_above signal" — fires 0-2x/year
+
+## Round-Trip Cost
+
+Round-trip trading cost (entry + exit commission + slippage) is ~0.3% for US stocks, ~0.2% for Indian stocks.
+- Set take_profit at least 4x round-trip cost: US minimum TP = 1.5%, India minimum TP = 1.0%
+- Set stop_loss at least 2x round-trip cost: US minimum SL = 1.0%, India minimum SL = 0.8%
+- For daily timeframe strategies: realistic TP range is 3-15%, SL range is 2-8%
+- Avoid TP < 1% or SL < 0.5% — costs eat the entire profit
+
 ## EXACT JSON Structure — copy this format precisely
 
 ### entry_rules conditions MUST use this exact structure:
 "conditions": {
   "logic": "AND",
   "conditions": [
-    { "id": "c1", "left": { "type": "indicator", "indicator_id": "ema_50" }, "operator": "crosses_above", "right": { "type": "indicator", "indicator_id": "ema_200" } },
-    { "id": "c2", "left": { "type": "indicator", "indicator_id": "rsi_14" }, "operator": "lt", "right": { "type": "constant", "value": 60 } }
+    { "id": "c1", "left": { "type": "price", "field": "close" }, "operator": "gt", "right": { "type": "indicator", "indicator_id": "sma_200" } },
+    { "id": "c2", "left": { "type": "indicator", "indicator_id": "rsi_14" }, "operator": "lt", "right": { "type": "constant", "value": 50 } }
   ]
 }
 CRITICAL: use "logic" NOT "type". Use "conditions" array NOT "rules" array.
@@ -756,18 +773,18 @@ export class GeminiProvider implements LLMProvider {
 // ============================================================
 
 export const OPENROUTER_MODELS = {
-  // Free tier — strong reasoning, zero cost
+  // Free tier — strong reasoning, zero cost (confirmed working)
   deepseekR1Free: "deepseek/deepseek-r1:free",
-  // Free tier — Qwen3 235B, excellent structured JSON output
-  qwen3Free: "qwen/qwen3-235b-a22b:free",
+  // Free tier — Qwen3.6 Plus Preview, fast structured output
+  qwen3Free: "qwen/qwen3.6-plus-preview:free",
   // Production — DeepSeek V3, best throughput + quality
   deepseekV3: "deepseek/deepseek-chat",
 } as const;
 
 export type OpenRouterModel = typeof OPENROUTER_MODELS[keyof typeof OPENROUTER_MODELS];
 
-// Default: Qwen3 235B free — fast structured output, zero cost
-const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS.qwen3Free;
+// Default: DeepSeek R1 free — confirmed working, strong reasoning
+const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS.deepseekR1Free;
 
 // ============================================================
 // OpenRouter Adapter (OpenAI-compatible, many free models)
