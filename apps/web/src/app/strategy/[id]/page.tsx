@@ -81,6 +81,7 @@ export default function StrategyDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
   const [tickerMetrics, setTickerMetrics] = useState<Record<string, unknown>[] | null>(null);
+  const [news, setNews] = useState<Array<{title: string; url: string; source: string; published_at: string}> | null>(null);
 
   const loadStrategy = useCallback(async () => {
     try {
@@ -129,6 +130,16 @@ export default function StrategyDetailPage() {
       .then((d) => setTickerMetrics(d.stocks ?? null))
       .catch(() => null);
   }, [definition]);
+
+  useEffect(() => {
+    if (!strategy) return;
+    const mkt = (strategy.market as string) ?? "US";
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    fetch(`${API_URL}/api/market/news?market=${mkt}&limit=6`)
+      .then((r) => r.json())
+      .then((d) => setNews(d.headlines ?? null))
+      .catch(() => null);
+  }, [strategy]);
 
   if (loading) {
     return (
@@ -317,6 +328,37 @@ export default function StrategyDetailPage() {
                       </div>
                     );
                   })}
+                </div>
+              </div>
+            )}
+
+            {/* Market News */}
+            {news && news.length > 0 && (
+              <div className="rounded-xl border border-white/[0.06] bg-[#111118] p-4">
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Market News</h3>
+                <div className="space-y-2">
+                  {news.map((item, i) => (
+                    <a
+                      key={i}
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-lg bg-white/[0.03] border border-white/[0.04] px-3 py-2.5 hover:bg-white/[0.06] transition-colors group"
+                    >
+                      <p className="text-xs text-gray-200 leading-snug group-hover:text-white line-clamp-2">
+                        {item.title}
+                      </p>
+                      <div className="mt-1 flex items-center gap-2 text-[10px] text-gray-600">
+                        <span>{item.source}</span>
+                        {item.published_at && (
+                          <>
+                            <span>·</span>
+                            <span>{item.published_at.slice(0, 10)}</span>
+                          </>
+                        )}
+                      </div>
+                    </a>
+                  ))}
                 </div>
               </div>
             )}
