@@ -32,6 +32,7 @@ from services import (
     MarketSnapshot,
     NewsFetcher,
 )
+from services.condition_evaluator import collect_condition_stats
 from services.strategy_templates import get_template, get_template_list, customize_template
 
 app = FastAPI(title="StrategyForge Engine", version="0.1.0")
@@ -182,6 +183,9 @@ def _compute_backtest_metrics(
             "zero_trades_warning": (
                 "No trades fired — entry conditions never triggered on the available data. "
                 "Try relaxing entry thresholds, extending the backtest period, or switching to a daily timeframe."
+            ),
+            "signal_diagnostics": collect_condition_stats(
+                strategy.get("entry_rules", []), df, indicators
             ),
         }
     # --- End early return ---
@@ -406,6 +410,11 @@ def _compute_backtest_metrics(
     except Exception as e:
         print(f"Walk-forward validation skipped: {e}")
 
+    # Signal diagnostics — per-condition hit rates across all bars
+    signal_diagnostics = collect_condition_stats(
+        strategy.get("entry_rules", []), df, indicators
+    )
+
     result = {
         "strategy_id": strategy.get("id", "temp"),
         "run_id": f"bt_{int(time.time())}",
@@ -418,6 +427,7 @@ def _compute_backtest_metrics(
         "monthly_returns": monthly_returns,
         "regime_performance": regime_performance,
         "walk_forward": walk_forward,
+        "signal_diagnostics": signal_diagnostics,
     }
     return result
 

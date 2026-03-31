@@ -151,6 +151,111 @@ def resolve_value(source: dict, df, bar_idx: int):
     return None
 
 
+def collect_condition_stats(entry_rules: list, df, indicators: list) -> dict:
+    """
+    Collect per-condition hit-rate statistics across all bars in df.
+
+    Iterates over every bar (bar_idx=1 to len(df)-1) and evaluates each
+    top-level condition in each entry rule individually, counting how often
+    it was True. Returns a diagnostic dict useful for debugging zero-trade
+    or low-trade backtests.
+
+    Args:
+        entry_rules: List of entry rule dicts from the strategy definition.
+        df: DataFrame with OHLCV and indicator columns (post warmup).
+        indicators: List of indicator config dicts (not used directly, kept
+                    for signature consistency with other evaluator functions).
+
+    Returns:
+        Dict shaped as:
+        {
+          "rule_id": {
+            "condition_id": {
+              "description": "rsi_14 lt 40",
+              "true_bars": 45,
+              "total_bars": 1250,
+              "hit_rate_pct": 3.6
+            },
+            ...
+          },
+          ...
+        }
+        Returns {} on any error.
+    """
+    try:
+        if df is None or len(df) == 0 or not entry_rules:
+            return {}
+
+        total_bars = len(df) - 1  # bars from index 1 onward
+        if total_bars <= 0:
+            return {}
+
+        result: dict = {}
+
+        for rule in entry_rules:
+            rule_id = rule.get("id", "unknown_rule")
+            cond_group = rule.get("conditions", {})
+            conditions = cond_group.get("conditions", [])
+            if not conditions:
+                continue
+
+            rule_stats: dict = {}
+            for cond in conditions:
+                cond_id = cond.get("id", "unknown_cond")
+
+                # Nested group — skip evaluation, mark as nested
+                if "logic" in cond:
+                    rule_stats[cond_id] = {
+                        "description": "nested_group",
+                        "true_bars": None,
+                        "total_bars": total_bars,
+                        "hit_rate_pct": None,
+                    }
+                    continue
+
+                # Build human-readable description
+                left = cond.get("left", {})
+                right = cond.get("right", {})
+                op = cond.get("operator", "?")
+
+                left_str = (
+                    left.get("indicator_id")
+                    or left.get("field", "price")
+                    if left.get("type") in ("indicator", "indicator_prev", "price")
+                    else str(left.get("value", "?"))
+                )
+                right_str = (
+                    right.get("indicator_id")
+                    or right.get("field", "price")
+                    if right.get("type") in ("indicator", "indicator_prev", "price")
+                    else str(right.get("value", "?"))
+                )
+                description = f"{left_str} {op} {right_str}"
+
+                # Count bars where condition is True
+                true_count = 0
+                for bar_idx in range(1, len(df)):
+                    try:
+                        if evaluate_single_condition(cond, df, bar_idx):
+                            true_count += 1
+                    except Exception:
+                        pass
+
+                hit_rate = round(true_count / total_bars * 100, 2) if total_bars > 0 else 0.0
+                rule_stats[cond_id] = {
+                    "description": description,
+                    "true_bars": true_count,
+                    "total_bars": total_bars,
+                    "hit_rate_pct": hit_rate,
+                }
+
+            result[rule_id] = rule_stats
+
+        return result
+    except Exception:
+        return {}
+
+
 def estimate_condition_proximity(cond_group: dict, df, bar_idx: int) -> list:
     """
     Estimate how close each condition in a group is to triggering (0-100 scale).
