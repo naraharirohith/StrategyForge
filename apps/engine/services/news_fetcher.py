@@ -95,21 +95,22 @@ class NewsFetcher:
             if article.get("title")
         ][:limit]
 
-    def _fetch_gnews(self, _market: str, limit: int) -> tuple[str, list[dict]]:
+    def _fetch_gnews(self, market: str, limit: int) -> tuple[str, list[dict]]:
         api_key = os.getenv("GNEWS_API_KEY")
         if not api_key:
             return "gnews", []
 
+        query = "India stock market NSE Nifty" if market == "IN" else "US stock market S&P500"
         params = urllib.parse.urlencode(
             {
-                "category": "business",
+                "q": query,
                 "lang": "en",
                 "max": limit,
                 "apikey": api_key,
             }
         )
         request = urllib.request.Request(
-            f"https://gnews.io/api/v4/top-headlines?{params}",
+            f"https://gnews.io/api/v4/search?{params}",
             headers={"User-Agent": "StrategyForge/1.0"},
         )
         payload = self._load_json(request)
