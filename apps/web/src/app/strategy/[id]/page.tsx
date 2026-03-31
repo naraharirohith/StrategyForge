@@ -80,6 +80,7 @@ export default function StrategyDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jsonOpen, setJsonOpen] = useState(false);
+  const [tickerMetrics, setTickerMetrics] = useState<Record<string, unknown>[] | null>(null);
 
   const loadStrategy = useCallback(async () => {
     try {
@@ -116,6 +117,18 @@ export default function StrategyDetailPage() {
   useEffect(() => {
     loadStrategy();
   }, [loadStrategy]);
+
+  useEffect(() => {
+    if (!definition) return;
+    const tickers = (definition?.universe as any)?.tickers as string[] | undefined;
+    const market = (definition?.universe as any)?.market as string | undefined;
+    if (!tickers?.length || !market) return;
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+    fetch(`${API_URL}/api/market/screener/tickers?tickers=${tickers.join(",")}&market=${market}`)
+      .then((r) => r.json())
+      .then((d) => setTickerMetrics(d.stocks ?? null))
+      .catch(() => null);
+  }, [definition]);
 
   if (loading) {
     return (
@@ -266,6 +279,45 @@ export default function StrategyDetailPage() {
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Live Market Position */}
+            {tickerMetrics && tickerMetrics.length > 0 && (
+              <div className="rounded-xl border border-white/[0.06] bg-[#111118] p-4">
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Live Market Position</h3>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                  {tickerMetrics.map((s) => {
+                    const ticker = s.ticker as string;
+                    const price = s.price as number;
+                    const ret = s.return_1m as number | null;
+                    const trend = s.trend as string;
+                    const pe = s.pe_ratio as number | null;
+                    const above200 = s.above_ema200 as boolean | null;
+                    const currency = s.currency as string;
+                    const symbol = currency === "INR" ? "₹" : "$";
+                    const retStr = ret != null ? `${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%` : "N/A";
+                    const trendColor = trend === "bullish" ? "text-emerald-400" : trend === "bearish" ? "text-red-400" : "text-yellow-400";
+                    const retColor = ret != null && ret >= 0 ? "text-emerald-400" : "text-red-400";
+                    return (
+                      <div key={ticker} className="rounded-lg bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+                        <p className="text-xs font-semibold text-white">{ticker.replace(".NS", "")}</p>
+                        <p className="text-[11px] text-gray-400 mt-0.5">{symbol}{price.toLocaleString()}</p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <span className={`text-xs font-medium ${retColor}`}>{retStr}</span>
+                          <span className={`text-[10px] ${trendColor} capitalize`}>{trend}</span>
+                        </div>
+                        {(pe != null || above200 != null) && (
+                          <p className="mt-1 text-[10px] text-gray-500">
+                            {pe != null ? `P/E ${pe}` : ""}
+                            {pe != null && above200 != null ? " · " : ""}
+                            {above200 === true ? "↑EMA200" : above200 === false ? "↓EMA200" : ""}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

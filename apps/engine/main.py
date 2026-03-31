@@ -510,6 +510,25 @@ async def screener_endpoint(market: str = "US", sector: str = "technology", limi
         return {"success": False, "error": str(e), "stocks": []}
 
 
+@app.get("/screener/tickers")
+async def screener_tickers_endpoint(tickers: str, market: str = "US"):
+    """
+    Return screener metrics for specific tickers.
+    tickers: comma-separated list, e.g. "AAPL,MSFT,GOOGL"
+    """
+    from services.screener import _fetch_stock_metrics
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()][:10]
+    results = []
+    for ticker in ticker_list:
+        try:
+            row = _fetch_stock_metrics(ticker, market)
+            if row:
+                results.append(row)
+        except Exception:
+            continue
+    return {"success": True, "stocks": results}
+
+
 @app.get("/news")
 async def get_news(market: str = "US", limit: int = 10):
     """
