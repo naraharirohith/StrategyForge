@@ -1,5 +1,10 @@
 "use client";
 
+interface AiMetadata {
+  dynamic_universe?: boolean;
+  universe_source?: string;
+}
+
 interface Indicator {
   id: string;
   type: string;
@@ -35,6 +40,7 @@ interface Strategy {
   indicators: Indicator[];
   entry_rules: EntryRule[];
   exit_rules: ExitRule[];
+  ai_metadata?: AiMetadata;
 }
 
 interface Props {
@@ -107,6 +113,12 @@ export function StrategyCard({ strategy, onRunBacktest, loading }: Props) {
           {strategy.universe && (
             <span className="inline-flex items-center rounded border border-white/[0.06] bg-white/5 px-2 py-0.5 text-xs text-gray-400">
               {strategy.universe.market} {strategy.universe.asset_class}
+            </span>
+          )}
+          {strategy.ai_metadata?.dynamic_universe && (
+            <span className="inline-flex items-center gap-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse inline-block" />
+              Live universe
             </span>
           )}
           {strategy.universe?.tickers && strategy.universe.tickers.length > 0 && (

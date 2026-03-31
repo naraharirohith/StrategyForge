@@ -312,6 +312,8 @@ export interface StrategyDefinition {
     generation_timestamp: string;    // ISO datetime
     user_input_summary: string;      // what the user asked for
     confidence_notes: string;        // AI's notes on why it chose this approach
+    dynamic_universe?: boolean;      // true if universe.tickers were injected from live screener
+    universe_source?: string;        // "live_screener" | "ai_generated"
   };
 }
 

@@ -280,7 +280,7 @@ async function fetchScreenerContext(
   market: string,
   description: string,
   engineUrl: string
-): Promise<string | null> {
+): Promise<{ contextText: string; tickers: string[] } | null> {
   const lower = description.toLowerCase();
 
   // Find first matching sector keyword.
@@ -330,7 +330,10 @@ async function fetchScreenerContext(
       return `- ${s.ticker}: ${symbol}${s.price.toLocaleString()} (${parts}, ${s.trend.toUpperCase()})${hintStr}`;
     });
 
-    return `[TOP ${detectedSector.toUpperCase()} STOCKS — ${market}]\n${lines.join("\n")}`;
+    return {
+      contextText: `[TOP ${detectedSector.toUpperCase()} STOCKS — ${market}]\n${lines.join("\n")}`,
+      tickers: data.stocks.slice(0, 5).map((s: { ticker: string }) => s.ticker),
+    };
   } catch {
     return null; // Non-fatal — screener failure should never block generation
   }
@@ -403,9 +406,9 @@ export class StrategyGenerator {
     // Fetch market context and screener context in parallel (both non-blocking)
     const market = input.preferences?.market || "US";
     let context: MarketContext | undefined;
-    let screenerContext: string | null = null;
+    let screenerResult: { contextText: string; tickers: string[] } | null = null;
     try {
-      [context, screenerContext] = await Promise.all([
+      [context, screenerResult] = await Promise.all([
         fetchMarketContext(market),
         fetchScreenerContext(market, input.description, ENGINE_URL),
       ]);
@@ -413,7 +416,7 @@ export class StrategyGenerator {
       console.warn("Market context fetch failed (non-fatal):", (e as Error).message);
     }
 
-    const userPrompt = buildUserPrompt(input, context, screenerContext);
+    const userPrompt = buildUserPrompt(input, context, screenerResult?.contextText ?? null);
     let lastError: Error | null = null;
 
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -428,12 +431,21 @@ export class StrategyGenerator {
         this.repair(strategy);
         this.validate(strategy);
 
+        // Inject live screener tickers as the strategy universe (Option A)
+        if (screenerResult?.tickers && screenerResult.tickers.length > 0) {
+          if (strategy.universe) {
+            strategy.universe.tickers = screenerResult.tickers as any;
+          }
+        }
+
         strategy.ai_metadata = {
           model_used: this.provider.name,
           prompt_hash: this.hashString(userPrompt),
           generation_timestamp: new Date().toISOString(),
           user_input_summary: input.description,
           confidence_notes: strategy.description,
+          dynamic_universe: screenerResult !== null && (screenerResult?.tickers?.length ?? 0) > 0,
+          universe_source: screenerResult !== null ? "live_screener" : "ai_generated",
         };
 
         return strategy;
