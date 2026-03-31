@@ -23,11 +23,19 @@ const RISK_COLORS: Record<string, string> = {
   aggressive: "bg-red-500/15 text-red-400 border-red-500/20",
 };
 
+const MARKET_FILTERS = ["All", "US", "IN"] as const;
+type MarketFilter = (typeof MARKET_FILTERS)[number];
+
+const STYLE_FILTERS = ["All", "momentum", "mean_reversion", "swing", "trend"] as const;
+type StyleFilter = (typeof STYLE_FILTERS)[number];
+
 export default function DashboardPage() {
   const [strategies, setStrategies] = useState<AnyObj[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>("All");
+  const [styleFilter, setStyleFilter] = useState<StyleFilter>("All");
 
   useEffect(() => {
     async function load() {
@@ -56,18 +64,70 @@ export default function DashboardPage() {
     }
   }
 
+  const filteredStrategies = strategies.filter((s) => {
+    if (marketFilter !== "All" && (s.market as string) !== marketFilter) return false;
+    if (styleFilter !== "All" && (s.style as string) !== styleFilter) return false;
+    return true;
+  });
+
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         {/* Header */}
-        <div className="mb-8 flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-100">My Strategies</h1>
-          {!loading && strategies.length > 0 && (
-            <span className="rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-400">
-              {strategies.length}
-            </span>
-          )}
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold text-gray-100">My Strategies</h1>
+            {!loading && strategies.length > 0 && (
+              <span className="rounded-full bg-blue-500/15 px-2.5 py-0.5 text-xs font-medium text-blue-400">
+                {strategies.length}
+              </span>
+            )}
+          </div>
+          <a
+            href="/"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 transition-colors"
+          >
+            New Strategy &rarr;
+          </a>
         </div>
+
+        {/* Filter chips */}
+        {!loading && strategies.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Market:</span>
+              {MARKET_FILTERS.map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMarketFilter(m)}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                    marketFilter === m
+                      ? "border-blue-500 bg-blue-500/15 text-blue-400"
+                      : "border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300"
+                  }`}
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-gray-500">Style:</span>
+              {STYLE_FILTERS.map((sf) => (
+                <button
+                  key={sf}
+                  onClick={() => setStyleFilter(sf)}
+                  className={`rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors ${
+                    styleFilter === sf
+                      ? "border-blue-500 bg-blue-500/15 text-blue-400"
+                      : "border-white/10 text-gray-500 hover:border-white/20 hover:text-gray-300"
+                  }`}
+                >
+                  {sf === "All" ? "All" : sf.replace(/_/g, " ")}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Loading */}
         {loading && (
@@ -97,16 +157,25 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* No results after filtering */}
+        {!loading && strategies.length > 0 && filteredStrategies.length === 0 && (
+          <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
+            <p className="text-sm text-gray-400">No strategies match the selected filters.</p>
+          </div>
+        )}
+
         {/* Strategy grid */}
-        {!loading && strategies.length > 0 && (
+        {!loading && filteredStrategies.length > 0 && (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            {strategies.map((s) => {
+            {filteredStrategies.map((s) => {
               const style = (s.style as string) ?? "";
               const risk = (s.riskLevel as string) ?? "";
               const market = (s.market as string) ?? "";
               const score = s.score as number | null;
               const grade = s.grade as string | null;
               const totalReturn = s.totalReturn as number | null;
+              const sharpeRatio = s.sharpeRatio as number | null;
+              const maxDrawdown = s.maxDrawdown as number | null;
 
               return (
                 <div
@@ -179,6 +248,17 @@ export default function DashboardPage() {
                       </a>
                     </div>
                   </div>
+
+                  {(sharpeRatio != null || maxDrawdown != null) && (
+                    <div className="mt-2 flex items-center gap-3 text-xs">
+                      {sharpeRatio != null && (
+                        <span className="text-gray-500">Sharpe {sharpeRatio.toFixed(2)}</span>
+                      )}
+                      {maxDrawdown != null && (
+                        <span className="text-red-400">DD {maxDrawdown.toFixed(1)}%</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

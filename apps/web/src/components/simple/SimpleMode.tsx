@@ -415,6 +415,25 @@ function MessageBubble({
                 </button>
               )}
             </div>
+
+            {message.confidence && !message.loading && (
+              <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+                <span>Live confidence:</span>
+                <span className="font-medium text-gray-300">
+                  {(message.confidence as any).overall_score ?? "—"}/100
+                </span>
+                {(message.confidence as any).grade && (
+                  <span className="rounded px-1.5 py-0.5 bg-white/10 text-gray-300 font-semibold">
+                    Grade {(message.confidence as any).grade}
+                  </span>
+                )}
+                {(message.confidence as any).market_regime && (
+                  <span className="capitalize text-gray-500">
+                    · {String((message.confidence as any).market_regime).replace(/_/g, " ")}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
