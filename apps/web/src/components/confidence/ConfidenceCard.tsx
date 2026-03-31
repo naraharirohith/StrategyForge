@@ -1,5 +1,14 @@
 "use client";
 
+interface ConditionHint {
+  label: string;
+  current: number;
+  target: number;
+  target_label: string | null;
+  op: string;
+  met: boolean;
+}
+
 interface Component {
   score: number;
   weight: number;
@@ -10,6 +19,7 @@ interface Component {
   level?: string;
   india_vix?: number | null;
   us_vix?: number | null;
+  condition_hints?: ConditionHint[];
 }
 
 interface GlobalRisk {
@@ -140,6 +150,26 @@ export function ConfidenceCard({ confidence }: { confidence: Confidence }) {
           weight={components.signal_proximity.weight}
           description={components.signal_proximity.description}
         />
+        {components.signal_proximity.condition_hints && components.signal_proximity.condition_hints.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {components.signal_proximity.condition_hints.slice(0, 4).map((hint, i) => (
+              <div key={i} className={`flex items-center gap-2 rounded-md px-2.5 py-1.5 text-xs ${
+                hint.met ? "bg-green-500/10 border border-green-500/20" : "bg-white/[0.03] border border-white/[0.06]"
+              }`}>
+                <span className={`font-medium ${hint.met ? "text-green-400" : "text-gray-400"}`}>
+                  {hint.label}
+                </span>
+                <span className="text-gray-600">{hint.op}</span>
+                <span className="text-gray-300">
+                  {hint.target_label ?? hint.target}
+                </span>
+                <span className="ml-auto text-gray-500">
+                  now: <span className={hint.met ? "text-green-400 font-medium" : "text-gray-300"}>{hint.current}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
         <ComponentRow
           label="Volatility Context"
           score={components.volatility_context.score}
