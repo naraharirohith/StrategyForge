@@ -749,6 +749,27 @@ export class GeminiProvider implements LLMProvider {
 }
 
 // ============================================================
+// OpenRouter model tiers
+// Free: DeepSeek R1 (strong reasoning, no cost)
+// Free alt: Qwen3 235B (fast, strong structured output)
+// Production: DeepSeek V3 (throughput + quality)
+// ============================================================
+
+export const OPENROUTER_MODELS = {
+  // Free tier — strong reasoning, zero cost
+  deepseekR1Free: "deepseek/deepseek-r1:free",
+  // Free tier — Qwen3 235B, excellent structured JSON output
+  qwen3Free: "qwen/qwen3-235b-a22b:free",
+  // Production — DeepSeek V3, best throughput + quality
+  deepseekV3: "deepseek/deepseek-chat",
+} as const;
+
+export type OpenRouterModel = typeof OPENROUTER_MODELS[keyof typeof OPENROUTER_MODELS];
+
+// Default: DeepSeek R1 free — best reasoning quality at zero cost
+const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS.deepseekR1Free;
+
+// ============================================================
 // OpenRouter Adapter (OpenAI-compatible, many free models)
 // ============================================================
 
@@ -757,7 +778,7 @@ export class OpenRouterProvider implements LLMProvider {
   private apiKey: string;
   private model: string;
 
-  constructor(apiKey: string, model = "google/gemma-3-12b-it:free") {
+  constructor(apiKey: string, model: string = DEFAULT_OPENROUTER_MODEL) {
     this.apiKey = apiKey;
     this.model = model;
   }

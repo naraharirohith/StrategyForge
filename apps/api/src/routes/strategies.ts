@@ -365,12 +365,12 @@ strategiesRouter.get("/strategies/:id", async (req, res) => {
 strategiesRouter.post("/strategies/generate", generateLimiter, async (req, res) => {
   const startTime = Date.now();
   type ProviderName = "claude" | "openai" | "gemini" | "openrouter";
-  let provider: ProviderName = "gemini";
+  let provider: ProviderName = "openrouter";
   let model: string | undefined;
   let description = "";
 
   try {
-    ({ provider = "gemini" as ProviderName, model } = req.body as { provider?: ProviderName; model?: string });
+    ({ provider = "openrouter" as ProviderName, model } = req.body as { provider?: ProviderName; model?: string });
     description = req.body.description;
     const { preferences } = req.body;
 

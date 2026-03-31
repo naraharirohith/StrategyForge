@@ -83,7 +83,8 @@ export function StrategyGeneratorPage({ market }: Props) {
   const [mode, setMode] = useState<"simple" | "expert">("simple");
   const [backtestPeriod, setBacktestPeriod] = useState<"1Y" | "2Y" | "3Y" | "5Y">("5Y");
   const [prompt,      setPrompt]      = useState("");
-  const [provider,    setProvider]    = useState<string>("gemini");
+  const [provider,    setProvider]    = useState<string>("openrouter");
+  const [orModel,     setOrModel]     = useState<string>("deepseek/deepseek-r1:free");
   const [step,        setStep]        = useState<Step>("idle");
   const [error,       setError]       = useState<string | null>(null);
   const [redirect,    setRedirect]    = useState<{ message: string; suggestion: string } | null>(null);
@@ -146,6 +147,7 @@ export function StrategyGeneratorPage({ market }: Props) {
           slippage_percent: config.slippagePct,
         },
         provider,
+        provider === "openrouter" ? orModel : undefined,
       );
       if (data.unsupported) {
         setRedirect({ message: data.message, suggestion: data.suggestion });
@@ -429,11 +431,43 @@ export function StrategyGeneratorPage({ market }: Props) {
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-gray-500">AI Model:</span>
+                {/* Free OpenRouter tiers */}
                 {[
-                  { id: "gemini", label: "Gemini Flash", sub: "Free" },
-                  { id: "openrouter", label: "OpenRouter", sub: "Free" },
-                  { id: "claude", label: "Claude", sub: "Paid" },
-                  { id: "openai", label: "GPT-4o", sub: "Paid" },
+                  {
+                    model: "deepseek/deepseek-r1:free",
+                    label: "DeepSeek R1",
+                    sub: "Free · Reasoning",
+                  },
+                  {
+                    model: "qwen/qwen3-235b-a22b:free",
+                    label: "Qwen3 235B",
+                    sub: "Free · Fast",
+                  },
+                  {
+                    model: "deepseek/deepseek-chat",
+                    label: "DeepSeek V3",
+                    sub: "Pro · Best quality",
+                  },
+                ].map((m) => {
+                  const active = provider === "openrouter" && orModel === m.model;
+                  return (
+                    <button
+                      key={m.model}
+                      onClick={() => { setProvider("openrouter"); setOrModel(m.model); }}
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        active
+                          ? "border-blue-500 bg-blue-500/10 text-blue-400 font-medium"
+                          : "border-white/[0.06] text-gray-500 hover:border-white/10"
+                      }`}
+                    >
+                      {m.label} <span className="text-gray-500">({m.sub})</span>
+                    </button>
+                  );
+                })}
+                {/* Fallback options */}
+                {[
+                  { id: "gemini", label: "Gemini Flash", sub: "Fallback" },
+                  { id: "claude", label: "Claude Sonnet", sub: "Premium" },
                 ].map((p) => (
                   <button
                     key={p.id}
@@ -450,7 +484,12 @@ export function StrategyGeneratorPage({ market }: Props) {
               </div>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs text-gray-500">
-                  Powered by {provider === "gemini" ? "Gemini Flash" : provider === "claude" ? "Claude" : provider === "openai" ? "GPT-4o" : "OpenRouter"}
+                  {provider === "openrouter"
+                    ? orModel === "deepseek/deepseek-r1:free" ? "DeepSeek R1 — free reasoning model"
+                    : orModel === "qwen/qwen3-235b-a22b:free" ? "Qwen3 235B — free, fast structured output"
+                    : "DeepSeek V3 — production quality"
+                    : provider === "claude" ? "Claude Sonnet 4.6"
+                    : "Gemini 2.5 Flash"}
                 </p>
                 <button
                   onClick={() => handleGenerate()}

@@ -62,12 +62,13 @@ function withBacktestWindow(strategy: Record<string, unknown>) {
 export async function generateStrategy(
   description: string,
   preferences?: Record<string, unknown>,
-  provider: string = "gemini"
+  provider: string = "openrouter",
+  model?: string
 ) {
   const res = await fetch(`${API_URL}/api/strategies/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description, preferences, provider }),
+    body: JSON.stringify({ description, preferences, provider, ...(model ? { model } : {}) }),
   });
   const data = await res.json();
   if (!res.ok || data.error) throw new Error(data.error || "Generation failed");
