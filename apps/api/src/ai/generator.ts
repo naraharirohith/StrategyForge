@@ -766,8 +766,8 @@ export const OPENROUTER_MODELS = {
 
 export type OpenRouterModel = typeof OPENROUTER_MODELS[keyof typeof OPENROUTER_MODELS];
 
-// Default: DeepSeek R1 free — best reasoning quality at zero cost
-const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS.deepseekR1Free;
+// Default: Qwen3 235B free — fast structured output, zero cost
+const DEFAULT_OPENROUTER_MODEL = OPENROUTER_MODELS.qwen3Free;
 
 // ============================================================
 // OpenRouter Adapter (OpenAI-compatible, many free models)

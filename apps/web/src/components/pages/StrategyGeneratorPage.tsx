@@ -84,7 +84,7 @@ export function StrategyGeneratorPage({ market }: Props) {
   const [backtestPeriod, setBacktestPeriod] = useState<"1Y" | "2Y" | "3Y" | "5Y">("5Y");
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("openrouter");
-  const [orModel,     setOrModel]     = useState<string>("deepseek/deepseek-r1:free");
+  const [orModel,     setOrModel]     = useState<string>("qwen/qwen3-235b-a22b:free");
   const [step,        setStep]        = useState<Step>("idle");
   const [error,       setError]       = useState<string | null>(null);
   const [redirect,    setRedirect]    = useState<{ message: string; suggestion: string } | null>(null);
