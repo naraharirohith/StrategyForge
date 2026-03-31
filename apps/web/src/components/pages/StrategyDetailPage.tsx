@@ -140,7 +140,7 @@ export function StrategyDetailPage({ market }: Props) {
 
   useEffect(() => {
     if (!strategy) return;
-    const mkt = (strategy.market as string) ?? "US";
+    const mkt = market;
     const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
     fetch(`${API_URL}/api/market/news?market=${mkt}&limit=6`)
       .then((r) => r.json())
