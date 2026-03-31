@@ -348,8 +348,9 @@ class ConfidenceScorer:
         import numpy as np
 
         style   = strategy.get("style", "hybrid")
-        market  = strategy.get("universe", {}).get("market", "US")
-        tickers = strategy.get("universe", {}).get("tickers", [])
+        universe = strategy.get("universe", {})
+        market  = str(universe.get("market", "US")).upper()
+        tickers = universe.get("tickers", [])
         primary = tickers[0] if tickers else ("^NSEI" if market == "IN" else "SPY")
 
         # --- Component 1: Backtest Strength (40%) ---
@@ -357,7 +358,8 @@ class ConfidenceScorer:
         bt_strength = float(bt_score)
 
         # --- Component 2: Regime Fit (30%) ---
-        regime_info   = cls.detect_regime(primary)
+        regime_ticker = "^NSEI" if market == "IN" else "SPY"
+        regime_info   = cls.detect_regime(regime_ticker)
         current_regime = regime_info.get("regime", "unknown")
         style_fits    = cls.STYLE_REGIME_FIT.get(style, {"bull": 65, "sideways": 65, "bear": 45})
         preferred_regime = max(style_fits, key=style_fits.get)
