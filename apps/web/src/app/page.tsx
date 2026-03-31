@@ -395,19 +395,27 @@ export default function Home() {
                             : "text-yellow-400";
                           const retColor = ret != null && ret >= 0 ? "text-emerald-400" : "text-red-400";
                           const symbol = stock.currency === "INR" ? "₹" : "$";
+                          const hint = getEntryHint(stock);
                           return (
                             <div
                               key={stock.ticker}
-                              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/[0.08]"
+                              className="px-2.5 py-2 rounded-lg bg-white/5 border border-white/[0.08]"
                             >
-                              <div>
-                                <p className="text-xs font-semibold text-white leading-none">{stock.ticker.replace(".NS", "")}</p>
-                                <p className="text-[10px] text-gray-500 mt-0.5">{symbol}{stock.price.toLocaleString()}</p>
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="text-xs font-semibold text-white leading-none">{stock.ticker.replace(".NS", "")}</p>
+                                  <p className="text-[10px] text-gray-500 mt-0.5">{symbol}{stock.price.toLocaleString()}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className={`text-xs font-medium ${retColor}`}>{retStr}</p>
+                                  <p className={`text-[10px] ${trendColor} capitalize`}>{stock.trend}</p>
+                                </div>
                               </div>
-                              <div className="text-right">
-                                <p className={`text-xs font-medium ${retColor}`}>{retStr}</p>
-                                <p className={`text-[10px] ${trendColor} capitalize`}>{stock.trend}</p>
-                              </div>
+                              {hint && (
+                                <p className="mt-1.5 pt-1.5 border-t border-white/[0.06] text-[10px] text-blue-200/60 leading-tight">
+                                  {hint}
+                                </p>
+                              )}
                             </div>
                           );
                         })}
@@ -674,4 +682,27 @@ function Spinner({ className = "" }: { className?: string }) {
   return (
     <span className={`inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent ${className}`} />
   );
+}
+
+function getEntryHint(stock: SectorStock): string | null {
+  const { trend, above_ema200, return_1m, pe_ratio } = stock;
+  if (trend === "bearish" && above_ema200 === false) {
+    return "Below EMA200 — wait for reversal signal";
+  }
+  if (above_ema200 === false && trend === "sideways") {
+    return "Testing EMA200 support — potential entry zone";
+  }
+  if (pe_ratio != null && pe_ratio < 12) {
+    return `P/E ${pe_ratio}x — value zone`;
+  }
+  if (pe_ratio != null && pe_ratio > 45) {
+    return `P/E ${pe_ratio}x — growth premium priced in`;
+  }
+  if (trend === "bullish" && return_1m != null && return_1m > 15) {
+    return "Extended run — consider waiting for pullback";
+  }
+  if (trend === "bullish" && above_ema200 === true) {
+    return "Above EMA200 — uptrend intact";
+  }
+  return null;
 }
