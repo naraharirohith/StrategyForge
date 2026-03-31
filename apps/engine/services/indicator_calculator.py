@@ -112,11 +112,13 @@ class IndicatorCalculator:
                     low_close = (df["Low"] - df["Close"].shift()).abs()
                     tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
 
-                    atr = tr.rolling(window=period).mean()
-                    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
-                    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+                    atr = tr.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+                    plus_di = 100 * (plus_dm.ewm(alpha=1/period, min_periods=period, adjust=False).mean() / atr)
+                    minus_di = 100 * (minus_dm.ewm(alpha=1/period, min_periods=period, adjust=False).mean() / atr)
                     dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
-                    df[ind_id] = dx.rolling(window=period).mean()
+                    df[f"{ind_id}_plus_di"] = plus_di
+                    df[f"{ind_id}_minus_di"] = minus_di
+                    df[ind_id] = dx.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
 
                 elif ind_type == "VOLUME_SMA":
                     period = int(params.get("period", 20))
