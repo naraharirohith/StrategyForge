@@ -68,6 +68,27 @@ marketRouter.get("/market/screener/tickers", async (req, res) => {
 });
 
 /**
+ * GET /api/market/news?market=US&limit=8
+ * Proxy to Python engine's /news endpoint.
+ */
+marketRouter.get("/market/news", async (req, res) => {
+  const { market = "US", limit = "8" } = req.query as Record<string, string>;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const response = await fetch(
+      `${ENGINE_URL}/news?market=${encodeURIComponent(market)}&limit=${encodeURIComponent(limit)}`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeout);
+    const data = await response.json();
+    res.json(data);
+  } catch (e) {
+    res.json({ success: false, headlines: [], error: String(e) });
+  }
+});
+
+/**
  * GET /api/market-snapshot/prompt?market=US
  * Returns market snapshot formatted as text for AI prompt injection.
  */
