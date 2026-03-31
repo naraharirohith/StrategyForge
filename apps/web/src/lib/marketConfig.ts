@@ -12,7 +12,6 @@ export interface MarketConfig {
   currency: string;
   currencySymbol: string;
   locale: string;
-  benchmark: string;
   benchmarkLabel: string;
   benchmarkTicker: string;
   commissionPct: number;
@@ -32,7 +31,6 @@ export const MARKET_CONFIG: Record<Market, MarketConfig> = {
     currency: "USD",
     currencySymbol: "$",
     locale: "en-US",
-    benchmark: "SPY",
     benchmarkLabel: "S&P 500",
     benchmarkTicker: "SPY",
     commissionPct: 0.1,
@@ -57,7 +55,6 @@ export const MARKET_CONFIG: Record<Market, MarketConfig> = {
     currency: "INR",
     currencySymbol: "₹",
     locale: "en-IN",
-    benchmark: "^NSEI",
     benchmarkLabel: "Nifty 50",
     benchmarkTicker: "^NSEI",
     commissionPct: 0.03,
