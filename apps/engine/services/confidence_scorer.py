@@ -7,7 +7,7 @@ signal proximity, and volatility context.
 """
 
 from .indicator_calculator import IndicatorCalculator
-from .condition_evaluator import evaluate_conditions, estimate_condition_proximity
+from .condition_evaluator import evaluate_conditions, estimate_condition_proximity, resolve_value
 
 
 class ConfidenceScorer:
@@ -218,7 +218,7 @@ class ConfidenceScorer:
         entry_rules = strategy.get("entry_rules", [])
 
         if not tickers or not entry_rules:
-            return {"score": 50, "triggered": False, "description": "No entry rules to evaluate", "nearest_signal": "N/A"}
+            return {"score": 50, "triggered": False, "description": "No entry rules to evaluate", "nearest_signal": "N/A", "condition_hints": []}
 
         ticker = tickers[0]
 
@@ -227,17 +227,18 @@ class ConfidenceScorer:
             if isinstance(data.columns, pd.MultiIndex):
                 data.columns = data.columns.get_level_values(0)
             if data.empty or len(data) < 30:
-                return {"score": 50, "triggered": False, "description": "Insufficient recent data", "nearest_signal": "N/A"}
+                return {"score": 50, "triggered": False, "description": "Insufficient recent data", "nearest_signal": "N/A", "condition_hints": []}
 
             df = IndicatorCalculator.compute(data.copy(), indicators)
             df = df.dropna()
             if len(df) < 2:
-                return {"score": 50, "triggered": False, "description": "Insufficient data after indicators", "nearest_signal": "N/A"}
+                return {"score": 50, "triggered": False, "description": "Insufficient data after indicators", "nearest_signal": "N/A", "condition_hints": []}
 
             last_idx = len(df) - 1
             best_score = 0
             best_desc  = ""
             any_triggered = False
+            hints = []
 
             for rule in entry_rules:
                 triggered = evaluate_conditions(rule.get("conditions", {}), df, last_idx, indicators)
@@ -255,6 +256,68 @@ class ConfidenceScorer:
                             pct_away = round(100 - avg)
                             best_desc = f"'{rule_name}': ~{pct_away}% away from trigger"
 
+                conditions_group = rule.get("conditions", {})
+                flat_conditions = conditions_group.get("conditions", [])
+                rule_triggered = triggered
+
+                for cond in flat_conditions:
+                    if "logic" in cond:
+                        continue  # skip nested groups for now
+                    left_spec = cond.get("left", {})
+                    right_spec = cond.get("right", {})
+                    op = cond.get("operator", "?")
+
+                    try:
+                        import math
+                        left_val = resolve_value(left_spec, df, last_idx)
+                        right_val = resolve_value(right_spec, df, last_idx)
+                        if left_val is None or right_val is None:
+                            continue
+                        if isinstance(left_val, float) and math.isnan(left_val):
+                            continue
+                        if isinstance(right_val, float) and math.isnan(right_val):
+                            continue
+                    except Exception:
+                        continue
+
+                    # Build human-readable label for left side
+                    if left_spec.get("type") == "indicator":
+                        ind_id = left_spec.get("indicator_id", "")
+                        ind_def = next((i for i in indicators if i.get("id") == ind_id), {})
+                        ind_type = ind_def.get("type", ind_id)
+                        params = ind_def.get("params", {})
+                        period = params.get("period", "")
+                        label = f"{ind_type}({period})" if period else ind_type
+                    elif left_spec.get("type") == "price":
+                        label = "Price"
+                    else:
+                        label = str(left_spec.get("type", "Indicator"))
+
+                    # Build target label
+                    if right_spec.get("type") == "indicator":
+                        ind_id2 = right_spec.get("indicator_id", "")
+                        ind_def2 = next((i for i in indicators if i.get("id") == ind_id2), {})
+                        ind_type2 = ind_def2.get("type", ind_id2)
+                        params2 = ind_def2.get("params", {})
+                        period2 = params2.get("period", "")
+                        target_label = f"{ind_type2}({period2})" if period2 else ind_type2
+                    else:
+                        target_label = None
+
+                    op_labels = {
+                        "gt": ">", "gte": "≥", "lt": "<", "lte": "≤",
+                        "eq": "=", "crosses_above": "↑ cross", "crosses_below": "↓ cross",
+                    }
+
+                    hints.append({
+                        "label": label,
+                        "current": round(float(left_val), 2),
+                        "target": round(float(right_val), 2),
+                        "target_label": target_label,
+                        "op": op_labels.get(op, op),
+                        "met": rule_triggered,
+                    })
+
             if not best_desc:
                 best_desc = "Could not evaluate entry conditions"
 
@@ -263,6 +326,7 @@ class ConfidenceScorer:
                 "triggered": any_triggered,
                 "description": best_desc,
                 "nearest_signal": best_desc,
+                "condition_hints": hints,
             }
         except Exception as e:
             print(f"Signal proximity failed: {e}")
@@ -377,6 +441,7 @@ class ConfidenceScorer:
                     "triggered": signal_info.get("triggered", False),
                     "description": signal_info.get("description", ""),
                     "nearest_signal": signal_info.get("nearest_signal", ""),
+                    "condition_hints": signal_info.get("condition_hints", []),
                 },
                 "volatility_context": {
                     "score": round(float(vol_score), 1),
