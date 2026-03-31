@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { getStrategies, deleteStrategy } from "@/lib/api";
 import { fmtDate, gradeColor, fmt } from "@/lib/utils";
 import { CardSkeleton } from "@/components/Skeleton";
-import { type Market, MARKET_CONFIG } from "@/lib/marketConfig";
+import { type Market } from "@/lib/marketConfig";
 
 type AnyObj = Record<string, unknown>;
 
@@ -35,7 +35,6 @@ interface Props {
 }
 
 export function DashboardPage({ market }: Props) {
-  const config = MARKET_CONFIG[market];
   const [strategies, setStrategies] = useState<AnyObj[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
