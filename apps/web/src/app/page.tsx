@@ -682,7 +682,7 @@ export default function Home() {
                   </div>
                 </div>
 
-                {backtest.walk_forward && (
+                {!!backtest.walk_forward && (
                   <WalkForwardCard result={backtest.walk_forward as any} />
                 )}
 

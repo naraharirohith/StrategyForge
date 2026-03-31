@@ -381,7 +381,7 @@ export default function StrategyDetailPage() {
             )}
 
             {/* Walk-Forward Validation */}
-            {backtest?.walk_forward && (
+            {!!backtest?.walk_forward && (
               <WalkForwardCard result={(backtest.walk_forward) as any} />
             )}
 
