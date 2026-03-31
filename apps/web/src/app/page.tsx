@@ -6,6 +6,7 @@ import { StrategyCard } from "@/components/strategy/StrategyCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
 import { ScoreCard } from "@/components/score/ScoreCard";
 import { MetricsSummary } from "@/components/backtest/MetricsSummary";
+import { WalkForwardCard } from "@/components/backtest/WalkForwardCard";
 import { EquityCurve } from "@/components/backtest/EquityCurve";
 import { DrawdownChart } from "@/components/backtest/DrawdownChart";
 import { MonthlyReturns } from "@/components/backtest/MonthlyReturns";
@@ -680,6 +681,10 @@ export default function Home() {
                     <MetricsSummary summary={backtest.summary as any} />
                   </div>
                 </div>
+
+                {backtest.walk_forward && (
+                  <WalkForwardCard result={backtest.walk_forward as any} />
+                )}
 
                 {/* Confidence + Charts */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">

@@ -6,6 +6,7 @@ import { getStrategy } from "@/lib/api";
 import { ScoreCard } from "@/components/score/ScoreCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
 import { MetricsSummary } from "@/components/backtest/MetricsSummary";
+import { WalkForwardCard } from "@/components/backtest/WalkForwardCard";
 import { EquityCurve } from "@/components/backtest/EquityCurve";
 import { DrawdownChart } from "@/components/backtest/DrawdownChart";
 import { MonthlyReturns } from "@/components/backtest/MonthlyReturns";
@@ -377,6 +378,11 @@ export default function StrategyDetailPage() {
             {/* Metrics */}
             {summary && (
               <MetricsSummary summary={summary as any} />
+            )}
+
+            {/* Walk-Forward Validation */}
+            {backtest?.walk_forward && (
+              <WalkForwardCard result={(backtest.walk_forward) as any} />
             )}
 
             {/* No backtest */}
