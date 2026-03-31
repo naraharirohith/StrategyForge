@@ -50,6 +50,24 @@ marketRouter.get("/market/screener", async (req, res) => {
 });
 
 /**
+ * GET /api/market/screener/tickers?tickers=AAPL,MSFT&market=US
+ * Proxy to Python engine's /screener/tickers endpoint.
+ * Returns screener metrics for specific tickers.
+ */
+marketRouter.get("/market/screener/tickers", async (req, res) => {
+  const { tickers = "", market = "US" } = req.query as Record<string, string>;
+  try {
+    const response = await fetch(
+      `${ENGINE_URL}/screener/tickers?tickers=${encodeURIComponent(tickers)}&market=${encodeURIComponent(market)}`
+    );
+    const data = await response.json();
+    res.json(data);
+  } catch (e) {
+    res.json({ success: false, stocks: [], error: String(e) });
+  }
+});
+
+/**
  * GET /api/market-snapshot/prompt?market=US
  * Returns market snapshot formatted as text for AI prompt injection.
  */

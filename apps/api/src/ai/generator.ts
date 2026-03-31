@@ -260,6 +260,22 @@ async function fetchMarketContext(market: string = "US"): Promise<MarketContext>
   return result;
 }
 
+function getEntryHint(stock: {
+  trend: string;
+  above_ema200: boolean | null;
+  return_1m: number | null;
+  pe_ratio: number | null;
+}): string | null {
+  const { trend, above_ema200, return_1m, pe_ratio } = stock;
+  if (trend === "bearish" && above_ema200 === false) return "wait for reversal";
+  if (above_ema200 === false && trend === "sideways") return "testing EMA200 support";
+  if (pe_ratio != null && pe_ratio < 12) return `value zone (P/E ${pe_ratio}x)`;
+  if (pe_ratio != null && pe_ratio > 45) return `growth premium (P/E ${pe_ratio}x)`;
+  if (trend === "bullish" && return_1m != null && return_1m > 15) return "extended — wait for pullback";
+  if (trend === "bullish" && above_ema200 === true) return "uptrend intact";
+  return null;
+}
+
 async function fetchScreenerContext(
   market: string,
   description: string,
@@ -309,7 +325,9 @@ async function fetchScreenerContext(
       const ma = s.above_ema200 === true ? "above EMA200" : s.above_ema200 === false ? "below EMA200" : "";
       const pe = s.pe_ratio != null ? `P/E: ${s.pe_ratio}` : "";
       const parts = [ret, ma, pe].filter(Boolean).join(", ");
-      return `- ${s.ticker}: ${symbol}${s.price.toLocaleString()} (${parts}, ${s.trend.toUpperCase()})`;
+      const hint = getEntryHint(s);
+      const hintStr = hint ? ` → ${hint}` : "";
+      return `- ${s.ticker}: ${symbol}${s.price.toLocaleString()} (${parts}, ${s.trend.toUpperCase()})${hintStr}`;
     });
 
     return `[TOP ${detectedSector.toUpperCase()} STOCKS — ${market}]\n${lines.join("\n")}`;
