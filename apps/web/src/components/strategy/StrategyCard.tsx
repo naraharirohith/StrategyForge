@@ -152,8 +152,8 @@ export function StrategyCard({ strategy, onRunBacktest, loading }: Props) {
         <div className="px-5 py-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Entry Rules</p>
           <div className="space-y-1">
-            {(strategy.entry_rules ?? []).map((rule) => (
-              <div key={rule.id} className="flex items-center gap-1.5 text-xs">
+            {(strategy.entry_rules ?? []).map((rule, i) => (
+              <div key={rule.id ?? i} className="flex items-center gap-1.5 text-xs">
                 <span className={`rounded px-1.5 py-0.5 font-medium ${rule.side === "long" ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
                   {rule.side}
                 </span>
@@ -167,8 +167,8 @@ export function StrategyCard({ strategy, onRunBacktest, loading }: Props) {
         <div className="px-5 py-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">Exit Rules</p>
           <div className="space-y-1">
-            {(strategy.exit_rules ?? []).map((rule) => (
-              <div key={rule.id} className="flex items-center gap-1.5 text-xs">
+            {(strategy.exit_rules ?? []).map((rule, i) => (
+              <div key={rule.id ?? i} className="flex items-center gap-1.5 text-xs">
                 <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-gray-400">
                   {EXIT_TYPE_LABELS[rule.type] ?? rule.type}
                   {rule.value != null ? ` ${rule.value}%` : ""}
