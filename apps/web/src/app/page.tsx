@@ -3,6 +3,7 @@ import { useState } from "react";
 import { generateStrategy, streamBacktest, getConfidenceScore, explainBacktest } from "@/lib/api";
 import { useToast } from "@/components/Toast";
 import { StrategyCard } from "@/components/strategy/StrategyCard";
+import { CurrentSetupCard, type TickerSetup } from "@/components/strategy/CurrentSetupCard";
 import { ConfidenceCard } from "@/components/confidence/ConfidenceCard";
 import { ScoreCard } from "@/components/score/ScoreCard";
 import { MetricsSummary } from "@/components/backtest/MetricsSummary";
@@ -141,6 +142,7 @@ export default function Home() {
   const [sectorStocks, setSectorStocks] = useState<SectorStock[] | null>(null);
   const [sectorLoading, setSectorLoading] = useState(false);
   const [explanation, setExplanation] = useState<string | null>(null);
+  const [liveTickerData, setLiveTickerData] = useState<TickerSetup[] | null>(null);
   const { toast } = useToast();
 
   function handleSectorClick(sector: SectorTile) {
@@ -175,6 +177,7 @@ export default function Home() {
     setBacktest(null);
     setConfidence(null);
     setExplanation(null);
+    setLiveTickerData(null);
     try {
       const data = await generateStrategy(
         descriptionToUse,
@@ -253,6 +256,21 @@ export default function Home() {
       setBacktest(result);
       setProgressMsg(null);
       setStep("backtested");
+
+      // Non-blocking — fetch live prices for current setup card
+      const tickers = (strategy as AnyObj | null)?.universe
+        ? ((strategy as AnyObj).universe as AnyObj).tickers as string[] | undefined
+        : undefined;
+      const mkt = (strategy as AnyObj | null)?.universe
+        ? ((strategy as AnyObj).universe as AnyObj).market as string | undefined
+        : undefined;
+      if (tickers?.length && mkt) {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
+        fetch(`${API_URL}/api/market/screener/tickers?tickers=${tickers.join(",")}&market=${mkt}`)
+          .then((r) => r.json())
+          .then((d) => setLiveTickerData((d.stocks ?? []) as TickerSetup[]))
+          .catch(() => null);
+      }
 
       // Non-blocking — fetch plain English explanation
       if (result.summary && strategyWithPeriod) {
@@ -357,6 +375,8 @@ export default function Home() {
                     setClarification(null);
                     setClarificationAnswers({});
                     setSectorStocks(null);
+                    setLiveTickerData(null);
+                    setBacktestPeriod("5Y");
                     setBacktestPeriod("5Y");
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
@@ -649,6 +669,22 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
+
+                {/* Current Setup — live entry/stop/target for each ticker */}
+                {liveTickerData && liveTickerData.length > 0 && !backtest?.zero_trades_warning && (() => {
+                  const exitRules = (strategy as AnyObj | undefined)?.exit_rules as AnyObj[] | undefined ?? [];
+                  const stopRule  = exitRules.find((r) => r.type === "stop_loss");
+                  const tpRule    = exitRules.find((r) => r.type === "take_profit");
+                  const stopPct   = (stopRule?.value as number) ?? 5;
+                  const targetPct = (tpRule?.value  as number) ?? 15;
+                  return (
+                    <CurrentSetupCard
+                      tickers={liveTickerData}
+                      stopPct={stopPct}
+                      targetPct={targetPct}
+                    />
+                  );
+                })()}
 
                 {!!backtest?.zero_trades_warning && (
                   <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3">
