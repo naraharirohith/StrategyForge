@@ -112,9 +112,17 @@ function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function periodToStartDate(period: "1Y" | "2Y" | "3Y" | "5Y"): string {
+  const days = { "1Y": 365, "2Y": 730, "3Y": 1095, "5Y": 1825 }[period];
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function Home() {
   const [mode,        setMode]        = useState<"simple" | "expert">("simple");
   const [market,      setMarket]      = useState<Market>("US");
+  const [backtestPeriod, setBacktestPeriod] = useState<"1Y" | "2Y" | "3Y" | "5Y">("5Y");
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("gemini");
   const [step,        setStep]        = useState<Step>("idle");
@@ -216,10 +224,18 @@ export default function Home() {
     setExplanation(null);
     setProgressMsg("Starting backtest...");
 
+    const strategyWithPeriod = {
+      ...(strategy as Record<string, unknown>),
+      backtest_config: {
+        ...((strategy as Record<string, unknown>).backtest_config as Record<string, unknown> ?? {}),
+        start_date: periodToStartDate(backtestPeriod),
+      },
+    };
+
     try {
       const result = await new Promise<AnyObj>((resolve, reject) => {
         streamBacktest(
-          strategy,
+          strategyWithPeriod,
           strategyId ?? undefined,
           (_stage, message) => {
             setProgressMsg(message);
@@ -238,12 +254,12 @@ export default function Home() {
       setStep("backtested");
 
       // Non-blocking — fetch plain English explanation
-      if (result.summary && strategy) {
+      if (result.summary && strategyWithPeriod) {
         explainBacktest(
           result.summary as Record<string, number>,
-          strategy as Record<string, unknown>,
-          (strategy as AnyObj)?.backtest_config !== undefined
-            ? ((strategy as AnyObj).backtest_config as AnyObj)?.initial_capital as number ?? 100000
+          strategyWithPeriod as Record<string, unknown>,
+          (strategyWithPeriod as AnyObj)?.backtest_config !== undefined
+            ? ((strategyWithPeriod as AnyObj).backtest_config as AnyObj)?.initial_capital as number ?? 100000
             : 100000
         ).then(setExplanation).catch(() => null);
       }
@@ -251,7 +267,7 @@ export default function Home() {
       // Auto-run confidence scoring after backtest
       setStep("scoring");
       try {
-        const conf = await getConfidenceScore(strategy, result, strategyId ?? undefined);
+        const conf = await getConfidenceScore(strategyWithPeriod, result, strategyId ?? undefined);
         setConfidence(conf.confidence ?? conf);
       } catch {
         // Confidence scoring is best-effort; don't block the user
@@ -340,6 +356,7 @@ export default function Home() {
                     setClarification(null);
                     setClarificationAnswers({});
                     setSectorStocks(null);
+                    setBacktestPeriod("5Y");
                   }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all ${
                     market === m
@@ -576,6 +593,24 @@ export default function Home() {
             {/* Strategy card */}
             {showStrategy && (
               <div className="mt-6">
+                {!showBacktest && !isBacktesting && (
+                  <div className="mt-3 flex items-center gap-2 mb-4">
+                    <span className="text-xs text-gray-500">Backtest period:</span>
+                    {(["1Y", "2Y", "3Y", "5Y"] as const).map((p) => (
+                      <button
+                        key={p}
+                        onClick={() => setBacktestPeriod(p)}
+                        className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                          backtestPeriod === p
+                            ? "border-blue-500 bg-blue-500/15 text-blue-400"
+                            : "border-white/[0.06] text-gray-500 hover:border-white/10 hover:text-gray-300"
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <StrategyCard
                   strategy={strategy as any}
                   onRunBacktest={handleBacktest}
@@ -600,7 +635,7 @@ export default function Home() {
               <div className="mt-8 space-y-6">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-semibold text-gray-100">Backtest Results</h2>
-                  <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">5-year period</span>
+                  <span className="rounded-full bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-400">{backtestPeriod} period</span>
                   <div className="ml-auto">
                     <button
                       onClick={() => {
