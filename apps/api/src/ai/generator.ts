@@ -162,9 +162,9 @@ Target 20-80 entry signals per 5-year backtest on daily data (roughly 1-3 per mo
 
 ## Round-Trip Cost
 
-Round-trip trading cost (entry + exit commission + slippage) is ~0.3% for US stocks, ~0.2% for Indian stocks.
-- Set take_profit at least 4x round-trip cost: US minimum TP = 1.5%, India minimum TP = 1.0%
-- Set stop_loss at least 2x round-trip cost: US minimum SL = 1.0%, India minimum SL = 0.8%
+Round-trip trading cost (entry + exit commission + slippage) is ~0.3% for US stocks, ~0.35% for Indian stocks.
+- Set take_profit at least 4x round-trip cost: US minimum TP = 1.5%, India minimum TP = 1.4%
+- Set stop_loss at least 2x round-trip cost: US minimum SL = 1.0%, India minimum SL = 0.7%
 - For daily timeframe strategies: realistic TP range is 3-15%, SL range is 2-8%
 - Avoid TP < 1% or SL < 0.5% — costs eat the entire profit
 
