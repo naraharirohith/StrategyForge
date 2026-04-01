@@ -84,7 +84,7 @@ export function StrategyGeneratorPage({ market }: Props) {
   const [backtestPeriod, setBacktestPeriod] = useState<"1Y" | "2Y" | "3Y" | "5Y">("5Y");
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("openrouter");
-  const [orModel,     setOrModel]     = useState<string>("qwen/qwen3-235b-a22b:free");
+  const [orModel,     setOrModel]     = useState<string>("qwen/qwen3.6-plus-preview:free");
   const [step,        setStep]        = useState<Step>("idle");
   const [error,       setError]       = useState<string | null>(null);
   const [redirect,    setRedirect]    = useState<{ message: string; suggestion: string } | null>(null);
@@ -439,8 +439,8 @@ export function StrategyGeneratorPage({ market }: Props) {
                     sub: "Free · Reasoning",
                   },
                   {
-                    model: "qwen/qwen3-235b-a22b:free",
-                    label: "Qwen3 235B",
+                    model: "qwen/qwen3.6-plus-preview:free",
+                    label: "Qwen3.6 Plus",
                     sub: "Free · Fast",
                   },
                   {
@@ -486,7 +486,7 @@ export function StrategyGeneratorPage({ market }: Props) {
                 <p className="text-xs text-gray-500">
                   {provider === "openrouter"
                     ? orModel === "deepseek/deepseek-r1:free" ? "DeepSeek R1 — free reasoning model"
-                    : orModel === "qwen/qwen3-235b-a22b:free" ? "Qwen3 235B — free, fast structured output"
+                    : orModel === "qwen/qwen3.6-plus-preview:free" ? "Qwen3.6 Plus — free, fast structured output"
                     : "DeepSeek V3 — production quality"
                     : provider === "claude" ? "Claude Sonnet 4.6"
                     : "Gemini 2.5 Flash"}
