@@ -26,6 +26,11 @@ interface SectorStock {
   currency: string;
 }
 
+type HitRateRow = {
+  label: string;
+  hitRate: number | null;
+};
+
 async function fetchSectorStocks(market: Market, sector: string): Promise<SectorStock[]> {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
   const res = await fetch(`${API_URL}/api/market/screener?market=${market}&sector=${sector}&limit=6`);
@@ -80,7 +85,9 @@ interface Props {
 }
 
 export function StrategyGeneratorPage({ market }: Props) {
-  const [mode, setMode] = useState<"simple" | "expert">("simple");
+  const [mode, setMode] = useState<"trade" | "invest">("trade");
+  const [tradeMode, setTradeMode] = useState<"simple" | "expert">("simple");
+  const [investInput, setInvestInput] = useState("");
   const [backtestPeriod, setBacktestPeriod] = useState<"1Y" | "2Y" | "3Y" | "5Y">("5Y");
   const [prompt,      setPrompt]      = useState("");
   const [provider,    setProvider]    = useState<string>("openrouter");
@@ -117,7 +124,8 @@ export function StrategyGeneratorPage({ market }: Props) {
   }
 
   function handleSwitchToExpert(loadedStrategy?: AnyObj) {
-    setMode("expert");
+    setMode("trade");
+    setTradeMode("expert");
     if (loadedStrategy) {
       setStrategy(loadedStrategy);
       setStep("generated");
@@ -272,6 +280,9 @@ export function StrategyGeneratorPage({ market }: Props) {
   const showBacktest  = backtest !== null && (step === "backtested" || step === "scoring" || step === "done");
   const initialCapital = (strategy?.backtest_config as AnyObj | undefined)?.initial_capital as number ?? 100000;
   const currency = (strategy?.backtest_config as AnyObj | undefined)?.currency as string ?? "USD";
+  const tradeCount = Number((backtest?.summary as AnyObj | undefined)?.total_trades ?? 0);
+  const hitRateRows = extractHitRateRows(backtest);
+  const benchmarkReturnPct = (backtest?.summary as AnyObj | undefined)?.benchmark_return_percent as number | undefined;
 
   return (
     <div className="min-h-screen">
@@ -283,10 +294,10 @@ export function StrategyGeneratorPage({ market }: Props) {
             Strategy<span className="text-blue-600">Forge</span>
           </h1>
           <p className="mt-2 text-sm text-gray-500">
-            Describe a trading idea in plain English — AI generates a backtestable strategy.
+            Choose your intent first, then move from idea to a structured thesis or a backtestable strategy.
           </p>
           <p className="mt-3 text-xs text-gray-600">
-            <a href="/" className="hover:text-gray-400 transition-colors">
+            <a href="/" className="transition-colors hover:text-gray-400">
               ← Switch market
             </a>
             <span className="mx-2 text-gray-700">·</span>
@@ -297,12 +308,68 @@ export function StrategyGeneratorPage({ market }: Props) {
           For educational purposes only. Not investment advice. Past performance does not guarantee future results.
         </p>
 
+        <div className="mb-8 grid gap-4 md:grid-cols-2">
+          <IntentCard
+            active={mode === "trade"}
+            title="TRADE"
+            description="Capitalize on a short-term pattern or momentum move. Days to 3 months."
+            onClick={() => setMode("trade")}
+          />
+          <IntentCard
+            active={mode === "invest"}
+            title="INVEST"
+            description="Build a position based on fundamentals and outlook. 6 months to years."
+            onClick={() => setMode("invest")}
+          />
+        </div>
+
+        {mode === "invest" && (
+          <div className="rounded-3xl border border-white/[0.08] bg-[#111118] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.28)]">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-blue-300/80">
+                Investment Input
+              </p>
+              <h2 className="mt-3 text-2xl font-semibold text-gray-100">
+                Start with a ticker or an investable theme
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-gray-400">
+                This mode is for long-horizon thesis building. The backend wiring comes in the next step, so for now we capture the idea cleanly and keep it ready for fundamentals-driven analysis.
+              </p>
+              <div className="mt-5 rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  What do you want to research?
+                </label>
+                <input
+                  type="text"
+                  value={investInput}
+                  onChange={(e) => setInvestInput(e.target.value)}
+                  placeholder="Enter a ticker (AAPL, RELIANCE.NS) or describe a theme..."
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-gray-100 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled
+                    className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white opacity-60"
+                  >
+                    Investment thesis coming soon
+                  </button>
+                  <p className="text-xs text-gray-500">
+                    Captured locally for now. No trade or backtest flow changes have been made.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Mode Toggle */}
+        {mode === "trade" && (
         <div className="mb-6 flex justify-center">
           <div className="flex items-center gap-1 rounded-full border border-white/[0.06] bg-[#111118] p-1">
             <button
-              onClick={() => setMode("simple")}
-              className={mode === "simple"
+              onClick={() => setTradeMode("simple")}
+              className={tradeMode === "simple"
                 ? "rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white"
                 : "rounded-full px-5 py-2 text-sm font-medium text-gray-400 hover:text-gray-200"
               }
@@ -310,8 +377,8 @@ export function StrategyGeneratorPage({ market }: Props) {
               Simple Mode
             </button>
             <button
-              onClick={() => setMode("expert")}
-              className={mode === "expert"
+              onClick={() => setTradeMode("expert")}
+              className={tradeMode === "expert"
                 ? "rounded-full bg-blue-600 px-5 py-2 text-sm font-medium text-white"
                 : "rounded-full px-5 py-2 text-sm font-medium text-gray-400 hover:text-gray-200"
               }
@@ -320,16 +387,17 @@ export function StrategyGeneratorPage({ market }: Props) {
             </button>
           </div>
         </div>
+        )}
 
         {/* Simple Mode */}
-        {mode === "simple" && (
+        {mode === "trade" && tradeMode === "simple" && (
           <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-6">
             <SimpleMode onSwitchToExpert={handleSwitchToExpert} />
           </div>
         )}
 
         {/* Expert Mode */}
-        {mode === "expert" && (
+        {mode === "trade" && tradeMode === "expert" && (
           <>
             {/* Input */}
             <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
@@ -680,11 +748,8 @@ export function StrategyGeneratorPage({ market }: Props) {
                   </div>
                 )}
 
-                {!!backtest.summary && (backtest.summary as any).total_trades < 30 && (
-                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-400">
-                    <span className="font-medium">Low sample size:</span> Only {(backtest.summary as any).total_trades} trades in this backtest.
-                    Results with fewer than 30 trades may not be statistically reliable. Consider testing over a longer period or with more tickers.
-                  </div>
+                {tradeCount > 0 && tradeCount < 30 && (
+                  <ReliabilityBanner trades={tradeCount} />
                 )}
 
                 {/* Score + Metrics */}
@@ -699,6 +764,10 @@ export function StrategyGeneratorPage({ market }: Props) {
                   <WalkForwardCard result={backtest.walk_forward as any} />
                 )}
 
+                {hitRateRows.length > 0 && (
+                  <RegimePerformanceCard rows={hitRateRows} />
+                )}
+
                 {/* Confidence + Charts */}
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                   {confidence ? (
@@ -709,7 +778,7 @@ export function StrategyGeneratorPage({ market }: Props) {
                     </div>
                   ) : null}
                   <div className="lg:col-span-2">
-                    <EquityCurve equityCurve={backtest.equity_curve as [string, number][]} initialCapital={initialCapital} currency={currency} benchmarkReturnPct={(backtest.summary as any)?.benchmark_return_percent} />
+                    <EquityCurve equityCurve={backtest.equity_curve as [string, number][]} initialCapital={initialCapital} currency={currency} benchmarkReturnPct={benchmarkReturnPct} />
                   </div>
                 </div>
 
@@ -721,6 +790,7 @@ export function StrategyGeneratorPage({ market }: Props) {
                   slippagePct={(strategy?.backtest_config as AnyObj | undefined)?.slippage_percent as number | undefined}
                   currency={currency}
                 />
+                <BacktestDisclaimer />
               </div>
             )}
           </>
@@ -729,6 +799,132 @@ export function StrategyGeneratorPage({ market }: Props) {
       </div>
     </div>
   );
+}
+
+function IntentCard({
+  active,
+  title,
+  description,
+  onClick,
+}: {
+  active: boolean;
+  title: string;
+  description: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group rounded-3xl border p-6 text-left transition-all ${
+        active
+          ? "border-blue-500/60 bg-[linear-gradient(135deg,rgba(37,99,235,0.2),rgba(17,17,24,0.96))] shadow-[0_20px_60px_rgba(37,99,235,0.14)]"
+          : "border-white/[0.08] bg-[#111118] hover:border-white/[0.18] hover:bg-[#15151d]"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <p className={`text-xs font-semibold tracking-[0.28em] ${active ? "text-blue-200" : "text-gray-500"}`}>
+            {title}
+          </p>
+          <p className={`mt-3 text-base leading-7 ${active ? "text-gray-100" : "text-gray-300"}`}>
+            {description}
+          </p>
+        </div>
+        <span
+          className={`h-3 w-3 rounded-full border ${
+            active ? "border-blue-300 bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.8)]" : "border-white/20 bg-transparent"
+          }`}
+        />
+      </div>
+    </button>
+  );
+}
+
+function RegimePerformanceCard({ rows }: { rows: HitRateRow[] }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
+      <div className="mb-4">
+        <h3 className="text-sm font-semibold text-gray-200">Regime Performance</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Condition hit rates across the backtest window.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/[0.06] text-xs uppercase tracking-wide text-gray-500">
+              <th className="pb-2 font-medium">Condition</th>
+              <th className="pb-2 text-right font-medium">Hit Rate</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.06]">
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <td className="py-3 text-sm text-gray-300">{row.label}</td>
+                <td className="py-3 text-right text-sm font-medium text-gray-100">{formatHitRate(row.hitRate)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function ReliabilityBanner({ trades }: { trades: number }) {
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-200">
+      ⚠ Only {trades} trades — results may not be statistically reliable
+    </div>
+  );
+}
+
+function BacktestDisclaimer() {
+  return (
+    <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-sm text-gray-400">
+      Past performance in backtests does not predict future results. Chart patterns may not repeat in current market conditions.
+    </div>
+  );
+}
+
+function extractHitRateRows(result: AnyObj | null): HitRateRow[] {
+  if (!result) return [];
+
+  const signalDiagnostics = result.signal_diagnostics;
+  const rows: HitRateRow[] = [];
+
+  if (signalDiagnostics && typeof signalDiagnostics === "object") {
+    for (const ruleStats of Object.values(signalDiagnostics as Record<string, unknown>)) {
+      if (!ruleStats || typeof ruleStats !== "object") continue;
+      for (const conditionStats of Object.values(ruleStats as Record<string, unknown>)) {
+        if (!conditionStats || typeof conditionStats !== "object") continue;
+        const data = conditionStats as Record<string, unknown>;
+        const label = typeof data.description === "string" && data.description.trim()
+          ? data.description.trim()
+          : "Condition";
+        const hitRate = typeof data.hit_rate_pct === "number" ? data.hit_rate_pct : null;
+        rows.push({ label, hitRate });
+      }
+    }
+  }
+
+  if (rows.length > 0) return rows;
+
+  const regimePerformance = result.regime_performance;
+  if (!Array.isArray(regimePerformance)) return [];
+
+  return regimePerformance
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+    .map((item) => ({
+      label: `${String(item.regime ?? "unknown")} regime`,
+      hitRate: typeof item.win_rate === "number" ? item.win_rate : null,
+    }));
+}
+
+function formatHitRate(hitRate: number | null): string {
+  if (hitRate == null || Number.isNaN(hitRate)) return "N/A";
+  return `${hitRate.toFixed(1)}%`;
 }
 
 function Spinner({ className = "" }: { className?: string }) {

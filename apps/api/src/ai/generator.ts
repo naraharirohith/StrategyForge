@@ -869,3 +869,26 @@ export function resolveProvider(providerName: string): LLMProvider {
   if (name === "gemini") return new GeminiProvider(apiKey);
   return new OpenAIProvider(apiKey);
 }
+
+/**
+ * Lightweight helper for one-off text generation calls that should reuse the
+ * existing provider abstraction without constructing a StrategyGenerator.
+ */
+export async function callAI(
+  systemPrompt: string,
+  userPrompt: string,
+  providerName?: "claude" | "openai" | "openrouter" | "gemini"
+): Promise<string> {
+  // Gemini forces JSON output mode (responseMimeType: application/json) which
+  // breaks plain-text generation. Exclude it from the auto-detection chain.
+  const name =
+    providerName ??
+    (process.env.ANTHROPIC_API_KEY
+      ? "claude"
+      : process.env.OPENAI_API_KEY
+      ? "openai"
+      : "openrouter");
+
+  const provider = resolveProvider(name);
+  return provider.generate(systemPrompt, userPrompt);
+}

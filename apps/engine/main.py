@@ -32,6 +32,7 @@ from services import (
     MarketSnapshot,
     NewsFetcher,
 )
+from services.fundamentals_fetcher import get_fundamentals
 from services.condition_evaluator import collect_condition_stats
 from services.strategy_templates import get_template, get_template_list, customize_template
 
@@ -555,6 +556,20 @@ async def get_news(market: str = "US", limit: int = 10):
     }
 
 
+@app.get("/fundamentals")
+async def get_fundamentals_endpoint(ticker: str):
+    """
+    Get a compact fundamentals snapshot for a ticker.
+    Values are cached in memory for one hour.
+    """
+    try:
+        return get_fundamentals(ticker)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/confidence", response_model=ConfidenceResponse)
 async def get_confidence(req: ConfidenceRequest):
     """
@@ -809,40 +824,6 @@ async def customize_template_endpoint(req: CustomizeTemplateRequest):
     if not result:
         raise HTTPException(status_code=404, detail=f"Template '{req.template_id}' not found")
     return {"success": True, "strategy": result}
-
-
-# ============================================================
-# Market Intelligence (Phase 2)
-# ============================================================
-
-@app.get("/market-snapshot")
-async def market_snapshot(market: str = "US"):
-    """Get current market snapshot (indices, VIX, sectors, regime)."""
-    try:
-        snapshot = MarketSnapshot.compute(market)
-        return {"success": True, "snapshot": snapshot}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@app.get("/market-snapshot/prompt")
-async def market_snapshot_prompt(market: str = "US"):
-    """Get market snapshot formatted as text for AI prompt injection."""
-    try:
-        text = MarketSnapshot.get_prompt_context(market)
-        return {"success": True, "prompt_context": text}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
-
-
-@app.get("/news")
-async def news_headlines(market: str = "US", limit: int = 5):
-    """Get recent financial news headlines."""
-    try:
-        headlines = NewsFetcher.fetch_headlines(market, limit)
-        return {"success": True, "headlines": headlines}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
 
 
 # ============================================================

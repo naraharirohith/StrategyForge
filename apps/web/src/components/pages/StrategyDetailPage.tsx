@@ -203,6 +203,7 @@ export function StrategyDetailPage({ market }: Props) {
   const summary = backtest?.summary as AnyObj | undefined;
   const grade = (strategy.grade as string) ?? (score?.grade as string) ?? null;
   const createdAt = strategy.createdAt as string | undefined;
+  const benchmarkReturnPct = summary?.benchmark_return_percent as number | undefined;
 
   return (
     <div className="min-h-screen">
@@ -391,15 +392,21 @@ export function StrategyDetailPage({ market }: Props) {
               </div>
             )}
 
+            <LowTradeWarning summary={summary} />
+
             {/* Metrics */}
             {summary && (
               <MetricsSummary summary={summary as any} />
             )}
 
+            <RegimePerformanceSection backtest={backtest} />
+
             {/* Walk-Forward Validation */}
             {!!backtest?.walk_forward && (
               <WalkForwardCard result={(backtest.walk_forward) as any} />
             )}
+
+            {backtest && <BacktestDisclaimer />}
 
             {/* No backtest */}
             {!backtest && !confidence && (
@@ -439,19 +446,23 @@ export function StrategyDetailPage({ market }: Props) {
             )}
             {backtest ? (
               <>
+                <LowTradeWarning summary={summary} />
                 {backtest.equity_curve && (
                   <EquityCurve
                     equityCurve={backtest.equity_curve as [string, number][]}
                     initialCapital={initialCapital}
                     currency={currency}
+                    benchmarkReturnPct={benchmarkReturnPct}
                   />
                 )}
+                <RegimePerformanceSection backtest={backtest} />
                 {backtest.drawdown_curve && (
                   <DrawdownChart drawdownCurve={backtest.drawdown_curve as [string, number][]} />
                 )}
                 {backtest.monthly_returns && (
                   <MonthlyReturns monthlyReturns={backtest.monthly_returns as { month: string; return_percent: number }[]} />
                 )}
+                <BacktestDisclaimer />
               </>
             ) : (
               <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
@@ -465,7 +476,10 @@ export function StrategyDetailPage({ market }: Props) {
         {tab === "Trades" && (
           <div>
             {backtest?.trades ? (
-              <TradeTable trades={backtest.trades as any[]} currency={currency} />
+              <div className="space-y-4">
+                <TradeTable trades={backtest.trades as any[]} currency={currency} />
+                <BacktestDisclaimer />
+              </div>
             ) : (
               <div className="rounded-2xl border border-white/[0.06] bg-[#111118] px-6 py-12 text-center">
                 <p className="text-sm text-gray-400">No trade data available.</p>
@@ -686,4 +700,92 @@ function resolveOperand(op: AnyObj | undefined, indicators: AnyObj[]): string {
   }
   if (type === "price") return (op.field as string) ?? "price";
   return String(op.value ?? op.indicator_id ?? "?");
+}
+
+function LowTradeWarning({ summary }: { summary?: AnyObj }) {
+  const totalTrades = typeof summary?.total_trades === "number" ? summary.total_trades : null;
+  if (totalTrades == null || totalTrades === 0 || totalTrades >= 30) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+      {`⚠ Only ${totalTrades} trades — results may not be statistically reliable`}
+    </div>
+  );
+}
+
+function RegimePerformanceSection({ backtest }: { backtest: AnyObj | null }) {
+  const rows = extractSignalDiagnostics(backtest);
+  if (rows.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-gray-200">Regime Performance</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Showing entry-condition hit rates from backtest diagnostics. This reflects how often each condition was true, not per-regime returns.
+        </p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/[0.06] text-xs uppercase tracking-wide text-gray-500">
+              <th className="pb-2 font-medium">Condition</th>
+              <th className="pb-2 text-right font-medium">Hit Rate</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/[0.06]">
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <td className="py-2 text-gray-300">{row.label}</td>
+                <td className="py-2 text-right text-gray-400">{row.hitRate}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function BacktestDisclaimer() {
+  return (
+    <p className="text-xs text-gray-500">
+      Past performance in backtests does not predict future results. Chart patterns may not repeat in current market conditions.
+    </p>
+  );
+}
+
+function extractSignalDiagnostics(backtest: AnyObj | null): Array<{ key: string; label: string; hitRate: string }> {
+  const diagnostics = backtest?.signal_diagnostics;
+  if (!diagnostics || typeof diagnostics !== "object") {
+    return [];
+  }
+
+  const rows: Array<{ key: string; label: string; hitRate: string }> = [];
+  for (const [ruleId, conditionMap] of Object.entries(diagnostics as Record<string, unknown>)) {
+    if (!conditionMap || typeof conditionMap !== "object") {
+      continue;
+    }
+
+    for (const [conditionId, stats] of Object.entries(conditionMap as Record<string, unknown>)) {
+      if (!stats || typeof stats !== "object") {
+        continue;
+      }
+
+      const statRecord = stats as Record<string, unknown>;
+      const description = typeof statRecord.description === "string" ? statRecord.description : conditionId;
+      const hitRatePct = typeof statRecord.hit_rate_pct === "number" ? statRecord.hit_rate_pct : null;
+      rows.push({
+        key: `${ruleId}:${conditionId}`,
+        label: description === "nested_group" ? `${ruleId}: nested condition group` : description,
+        hitRate: hitRatePct == null ? "N/A" : `${hitRatePct.toFixed(1)}%`,
+      });
+    }
+  }
+
+  return rows;
 }

@@ -19,13 +19,25 @@ export function EquityCurve({ equityCurve, initialCapital, currency = "USD", ben
       date: date.split(" ")[0],
       value,
       ...(benchmarkReturnPct != null ? {
-        benchmark: initialCapital + (initialCapital * benchmarkReturnPct / 100) * (i / (arr.length - 1))
+        benchmark: initialCapital + (initialCapital * benchmarkReturnPct / 100) * (i / Math.max(1, arr.length - 1))
       } : {}),
     }));
 
   return (
     <div className="rounded-2xl border border-white/[0.06] bg-[#111118] p-5">
-      <h3 className="mb-4 text-sm font-semibold text-gray-300">Equity Curve</h3>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-gray-300">Equity Curve vs Buy &amp; Hold</h3>
+        <div className="flex items-center gap-4 text-xs text-gray-500">
+          <span className="inline-flex items-center gap-2">
+            <span className="h-0.5 w-5 rounded-full bg-blue-600" />
+            Strategy
+          </span>
+          <span className="inline-flex items-center gap-2">
+            <span className="h-0.5 w-5 rounded-full border-t border-dashed border-gray-400" />
+            Buy &amp; Hold benchmark
+          </span>
+        </div>
+      </div>
       <ResponsiveContainer width="100%" height={260}>
         <LineChart data={data}>
           <CartesianGrid strokeDasharray="3 3" stroke="#1e1e2e" />
@@ -67,8 +79,8 @@ export function EquityCurve({ equityCurve, initialCapital, currency = "USD", ben
             <Line
               type="monotone"
               dataKey="benchmark"
-              stroke="#6b7280"
-              strokeWidth={1.5}
+              stroke="#94a3b8"
+              strokeWidth={2}
               strokeDasharray="6 3"
               dot={false}
               name="Buy & Hold"
